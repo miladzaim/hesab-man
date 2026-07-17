@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>حساب من</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>حساب من</h1>
+      <div class="subtitle">مدیریت مالی شخصی و خودروها</div>
+    </div>
+    <span class="version">v1.0.0</span>
+  </header>
+
+  <main>
+    <section id="dashboard" class="page active">
+      <div class="grid stats">
+        <article class="card"><span>موجودی کل حساب‌ها</span><strong id="totalBalance">۰ تومان</strong></article>
+        <article class="card"><span>کل واریزی</span><strong id="totalIncome">۰ تومان</strong></article>
+        <article class="card"><span>کل هزینه</span><strong id="totalExpense">۰ تومان</strong></article>
+        <article class="card"><span>خالص</span><strong id="netBalance">۰ تومان</strong></article>
+      </div>
+      <div class="card">
+        <div class="section-title">آخرین تراکنش‌ها</div>
+        <div id="recentTransactions" class="list empty">هنوز تراکنشی ثبت نشده است.</div>
+      </div>
+    </section>
+
+    <section id="new" class="page">
+      <div class="card">
+        <div class="section-title">ثبت تراکنش</div>
+        <form id="transactionForm" class="form-grid">
+          <label>نوع
+            <select id="txType" required>
+              <option value="income">واریزی</option>
+              <option value="expense">هزینه</option>
+            </select>
+          </label>
+          <label>حساب
+            <select id="txAccount" required></select>
+          </label>
+          <label>خودرو / بخش
+            <select id="txVehicle"><option value="">بدون خودرو / شخصی</option></select>
+          </label>
+          <label>مبلغ (تومان)
+            <input id="txAmount" inputmode="numeric" required placeholder="مثلاً 12000000" />
+          </label>
+          <label>تاریخ
+            <input id="txDate" required placeholder="1405/04/27" />
+          </label>
+          <label class="full">شرح
+            <input id="txDescription" placeholder="شرح تراکنش" />
+          </label>
+          <button class="primary full" type="submit">ثبت تراکنش</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <div class="section-title">انتقال بین حساب‌ها</div>
+        <form id="transferForm" class="form-grid">
+          <label>از حساب<select id="transferFrom" required></select></label>
+          <label>به حساب<select id="transferTo" required></select></label>
+          <label>مبلغ<input id="transferAmount" inputmode="numeric" required /></label>
+          <label>تاریخ<input id="transferDate" required placeholder="1405/04/27" /></label>
+          <label class="full">شرح<input id="transferDescription" placeholder="مثلاً انتقال به کارت دوم" /></label>
+          <button class="primary full" type="submit">ثبت انتقال</button>
+        </form>
+      </div>
+    </section>
+
+    <section id="vehicles" class="page">
+      <div class="card">
+        <div class="section-title">مدیریت خودروها</div>
+        <form id="vehicleForm" class="inline-form">
+          <input id="vehicleName" required placeholder="نام خودرو" />
+          <button class="primary" type="submit">افزودن</button>
+        </form>
+        <div id="vehicleList" class="list empty">هنوز خودرویی ثبت نشده است.</div>
+      </div>
+    </section>
+
+    <section id="reports" class="page">
+      <div class="card">
+        <div class="section-title">گزارش تراکنش‌ها</div>
+        <div class="form-grid compact">
+          <label>نوع
+            <select id="reportType"><option value="all">همه</option><option value="income">واریزی</option><option value="expense">هزینه</option><option value="transfer">انتقال</option></select>
+          </label>
+          <label>خودرو
+            <select id="reportVehicle"><option value="all">همه</option></select>
+          </label>
+          <button id="applyReport" class="secondary full" type="button">اعمال فیلتر</button>
+        </div>
+        <div id="reportList" class="list empty">رکوردی وجود ندارد.</div>
+      </div>
+    </section>
+
+    <section id="more" class="page">
+      <div class="card">
+        <div class="section-title">حساب‌ها</div>
+        <form id="accountForm" class="form-grid">
+          <label>نام حساب<input id="accountName" required placeholder="مثلاً بانک ملت" /></label>
+          <label>موجودی اولیه<input id="accountBalance" inputmode="numeric" value="0" required /></label>
+          <button class="primary full" type="submit">ثبت حساب</button>
+        </form>
+        <div id="accountList" class="list empty">هنوز حسابی ثبت نشده است.</div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">پشتیبان‌گیری</div>
+        <div class="button-row">
+          <button id="exportBackup" class="secondary">دریافت فایل پشتیبان</button>
+          <label class="secondary file-button">بازیابی پشتیبان<input id="importBackup" type="file" accept="application/json" hidden /></label>
+          <button id="resetApp" class="danger">پاک‌کردن همه اطلاعات</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom-nav">
+    <button data-page="dashboard" class="active">خانه</button>
+    <button data-page="new">ثبت جدید</button>
+    <button data-page="vehicles">خودروها</button>
+    <button data-page="reports">گزارش‌ها</button>
+    <button data-page="more">بیشتر</button>
+  </nav>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
