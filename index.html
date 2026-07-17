@@ -14,7 +14,7 @@
       <h1>حساب من</h1>
       <div class="subtitle">مدیریت مالی شخصی و خودروها</div>
     </div>
-    <span class="version">v1.0.0</span>
+    <span class="version">v1.2.0</span>
   </header>
 
   <main>
@@ -109,6 +109,37 @@
           <button class="primary full" type="submit">ثبت حساب</button>
         </form>
         <div id="accountList" class="list empty">هنوز حسابی ثبت نشده است.</div>
+      </div>
+
+
+      <div class="card">
+        <div class="section-title">فضای ابری Supabase</div>
+        <div id="cloudStatus" class="cloud-status">فضای ابری هنوز تنظیم نشده است</div>
+        <div class="form-grid cloud-config">
+          <label class="full">Project URL
+            <input id="cloudUrl" dir="ltr" placeholder="https://xxxx.supabase.co" />
+          </label>
+          <label class="full">Publishable Key
+            <textarea id="cloudKey" dir="ltr" rows="3" placeholder="sb_publishable_..."></textarea>
+          </label>
+          <button id="saveCloudConfig" class="secondary full" type="button">ذخیره تنظیمات اتصال</button>
+        </div>
+        <div id="cloudAuthBox">
+          <form id="cloudLoginForm" class="form-grid">
+            <label>ایمیل<input id="cloudEmail" type="email" dir="ltr" required /></label>
+            <label>رمز عبور<input id="cloudPassword" type="password" minlength="6" required /></label>
+            <button class="primary" type="submit">ورود</button>
+            <button id="cloudSignup" class="secondary" type="button">ساخت حساب</button>
+          </form>
+        </div>
+        <div id="cloudSignedBox" hidden>
+          <p>کاربر: <strong id="cloudUser"></strong></p>
+          <div class="button-row">
+            <button id="cloudPush" class="primary" type="button">ذخیره در ابر</button>
+            <button id="cloudPull" class="secondary" type="button">دریافت از ابر</button>
+            <button id="cloudLogout" class="danger" type="button">خروج</button>
+          </div>
+        </div>
       </div>
 
       <div class="card">
