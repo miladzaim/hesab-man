@@ -1,6 +1,8 @@
 const KEY='hesab-man-v1';
 const CLOUD_KEY='hesab-man-cloud-config-v1';
 const SESSION_KEY='hesab-man-cloud-session-v1';
+const LOCAL_UPDATED_KEY='hesab-man-local-updated-v1';
+const CLOUD_SYNCED_KEY='hesab-man-cloud-synced-v1';
 const DEFAULT_SUPABASE_URL='https://clvwnkpphjrrywdiefoe.supabase.co';
 const emptyState=()=>({accounts:[],vehicles:[],transactions:[]});
 let state=load();
@@ -10,7 +12,12 @@ let syncTimer=null;
 
 function loadJSON(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}}
 function load(){try{return {...emptyState(),...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch{return emptyState()}}
-function saveLocal(){localStorage.setItem(KEY,JSON.stringify(state));renderAll();scheduleCloudSave()}
+function saveLocal(){
+  localStorage.setItem(KEY,JSON.stringify(state));
+  localStorage.setItem(LOCAL_UPDATED_KEY,new Date().toISOString());
+  renderAll();
+  scheduleCloudSave();
+}
 function uid(){return crypto.randomUUID?crypto.randomUUID():Date.now()+Math.random().toString(16).slice(2)}
 function money(v){return new Intl.NumberFormat('fa-IR').format(Number(v||0))+' تومان'}
 function digits(v){return Number(String(v).replace(/[^0-9]/g,''))||0}
@@ -71,6 +78,12 @@ function renderReports(){
   const el=document.getElementById('reportList');
   if(!rows.length){el.className='list empty';el.textContent='رکوردی وجود ندارد.'}else{el.className='list';el.innerHTML=rows.map(txHtml).join('')}
 }
+function setCloudStatus(text,mode=''){
+  const status=document.getElementById('cloudStatus');
+  if(!status)return;
+  status.textContent=text;
+  status.className='cloud-status'+(mode?' '+mode:'');
+}
 function renderCloudStatus(){
   const status=document.getElementById('cloudStatus');
   const authBox=document.getElementById('cloudAuthBox');
@@ -78,7 +91,7 @@ function renderCloudStatus(){
   document.getElementById('cloudUrl').value=cloudConfig.url||DEFAULT_SUPABASE_URL;
   document.getElementById('cloudKey').value=cloudConfig.key||'';
   if(cloudSession?.access_token){
-    status.textContent=`متصل به فضای ابری — ${cloudSession.user?.email||'کاربر'}`;
+    status.textContent=`متصل به فضای ابری — ${cloudSession.user?.email||'کاربر'} | ذخیره خودکار فعال`;
     status.className='cloud-status online';
     authBox.hidden=true;signedBox.hidden=false;
     document.getElementById('cloudUser').textContent=cloudSession.user?.email||'';
@@ -132,21 +145,57 @@ async function refreshSession(){
 }
 async function cloudPush(showToast=false){
   if(!cloudSession?.user?.id)return;
+  const now=new Date().toISOString();
   try{
-    await cloudFetch('/rest/v1/cloud_states?on_conflict=user_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:cloudSession.user.id,payload:state,updated_at:new Date().toISOString()})});
+    setCloudStatus('در حال ذخیره خودکار در ابر…','online');
+    await cloudFetch('/rest/v1/cloud_states?on_conflict=user_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:cloudSession.user.id,payload:state,updated_at:now})});
+    localStorage.setItem(CLOUD_SYNCED_KEY,now);
+    setCloudStatus(`ذخیره خودکار انجام شد — ${cloudSession.user?.email||'کاربر'}`,'online');
     if(showToast)toast('اطلاعات در فضای ابری ذخیره شد');
-  }catch(err){if(String(err.message).includes('JWT')){if(await refreshSession())return cloudPush(showToast)}throw err}
+  }catch(err){
+    setCloudStatus('ذخیره محلی انجام شد؛ همگام‌سازی پس از اتصال اینترنت','');
+    if(String(err.message).includes('JWT')){if(await refreshSession())return cloudPush(showToast)}
+    throw err;
+  }
 }
 async function cloudPull(confirmReplace=false){
   if(!cloudSession?.user?.id)return;
   const rows=await cloudFetch(`/rest/v1/cloud_states?user_id=eq.${encodeURIComponent(cloudSession.user.id)}&select=payload,updated_at&limit=1`);
   if(rows?.length&&rows[0].payload){
     if(!confirmReplace||!state.transactions.length||confirm('اطلاعات ابری جایگزین اطلاعات فعلی شود؟')){
-      state={...emptyState(),...rows[0].payload};localStorage.setItem(KEY,JSON.stringify(state));renderAll();toast('اطلاعات ابری دریافت شد');
+      state={...emptyState(),...rows[0].payload};
+      localStorage.setItem(KEY,JSON.stringify(state));
+      localStorage.setItem(LOCAL_UPDATED_KEY,rows[0].updated_at||new Date().toISOString());
+      localStorage.setItem(CLOUD_SYNCED_KEY,rows[0].updated_at||new Date().toISOString());
+      renderAll();toast('اطلاعات ابری دریافت شد');
     }
-  }else{await cloudPush();toast('نسخه اولیه در فضای ابری ساخته شد')}
+  }else{await cloudPush();if(confirmReplace)toast('نسخه اولیه در فضای ابری ساخته شد')}
 }
-function scheduleCloudSave(){clearTimeout(syncTimer);if(cloudSession?.access_token)syncTimer=setTimeout(()=>cloudPush().catch(e=>toast('ذخیره ابری ناموفق: '+e.message)),900)}
+async function smartCloudSync(){
+  if(!cloudSession?.user?.id||!navigator.onLine)return;
+  try{
+    const rows=await cloudFetch(`/rest/v1/cloud_states?user_id=eq.${encodeURIComponent(cloudSession.user.id)}&select=payload,updated_at&limit=1`);
+    if(!rows?.length){await cloudPush();return}
+    const remoteTime=Date.parse(rows[0].updated_at||0)||0;
+    const localTime=Date.parse(localStorage.getItem(LOCAL_UPDATED_KEY)||0)||0;
+    if(remoteTime>localTime&&rows[0].payload){
+      state={...emptyState(),...rows[0].payload};
+      localStorage.setItem(KEY,JSON.stringify(state));
+      localStorage.setItem(LOCAL_UPDATED_KEY,rows[0].updated_at);
+      localStorage.setItem(CLOUD_SYNCED_KEY,rows[0].updated_at);
+      renderAll();
+      setCloudStatus(`آخرین اطلاعات از ابر دریافت شد — ${cloudSession.user?.email||'کاربر'}`,'online');
+    }else if(localTime>remoteTime){
+      await cloudPush();
+    }else{
+      setCloudStatus(`همگام و به‌روز — ${cloudSession.user?.email||'کاربر'}`,'online');
+    }
+  }catch(e){setCloudStatus('فعلاً آفلاین؛ تغییرات محلی محفوظ است','')}
+}
+function scheduleCloudSave(){
+  clearTimeout(syncTimer);
+  if(cloudSession?.access_token)syncTimer=setTimeout(()=>cloudPush().catch(()=>{}),700);
+}
 
 document.getElementById('saveCloudConfig').addEventListener('click',()=>{
   const url=normalizeUrl(document.getElementById('cloudUrl').value);const key=document.getElementById('cloudKey').value.trim();
@@ -160,4 +209,7 @@ document.getElementById('cloudPull').addEventListener('click',()=>cloudPull(true
 document.getElementById('cloudLogout').addEventListener('click',()=>{cloudSession=null;localStorage.removeItem(SESSION_KEY);renderCloudStatus();toast('از حساب خارج شدید')});
 
 txDate.value=transferDate.value=todayJalali();renderAll();
+if(cloudSession?.access_token)setTimeout(()=>smartCloudSync(),300);
+window.addEventListener('online',()=>smartCloudSync());
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')smartCloudSync()});
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
