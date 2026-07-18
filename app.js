@@ -1,215 +1,64 @@
-const KEY='hesab-man-v1';
-const CLOUD_KEY='hesab-man-cloud-config-v1';
-const SESSION_KEY='hesab-man-cloud-session-v1';
-const LOCAL_UPDATED_KEY='hesab-man-local-updated-v1';
-const CLOUD_SYNCED_KEY='hesab-man-cloud-synced-v1';
-const DEFAULT_SUPABASE_URL='https://clvwnkpphjrrywdiefoe.supabase.co';
-const emptyState=()=>({accounts:[],vehicles:[],transactions:[]});
-let state=load();
-let cloudConfig=loadJSON(CLOUD_KEY,{url:DEFAULT_SUPABASE_URL,key:''});
-let cloudSession=loadJSON(SESSION_KEY,null);
-let syncTimer=null;
-
-function loadJSON(key,fallback){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}}
-function load(){try{return {...emptyState(),...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch{return emptyState()}}
-function saveLocal(){
-  localStorage.setItem(KEY,JSON.stringify(state));
-  localStorage.setItem(LOCAL_UPDATED_KEY,new Date().toISOString());
-  renderAll();
-  scheduleCloudSave();
-}
+const KEY='hesab-man-full-v2',OLD_KEY='hesab-man-v1',CLOUD_KEY='hesab-man-cloud-config-v1',SESSION_KEY='hesab-man-cloud-session-v1';
+const DEFAULT_URL='https://clvwnkpphjrrywdiefoe.supabase.co';
+const defaultState=()=>({version:2,updatedAt:new Date().toISOString(),accounts:[],vehicles:[],drivers:[],transactions:[],categories:{vehicle:['لاستیک','روغن','تعمیرات','سرویس دوره‌ای','قطعات','سوخت','بیمه','کارواش','سایر'],personal:['خرید خانه','رستوران','سفر','درمان','قبوض','پوشاک','تفریح','هدیه','سایر']}});
+let state=loadState(),cloudConfig=loadJSON(CLOUD_KEY,{url:DEFAULT_URL,key:''}),cloudSession=loadJSON(SESSION_KEY,null),syncTimer=null,syncing=false;
+function loadJSON(k,f){try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch{return f}}
+function migrate(s){const n={...defaultState(),...s,categories:{...defaultState().categories,...(s.categories||{})}};n.accounts=n.accounts||[];n.vehicles=n.vehicles||[];n.drivers=n.drivers||[];n.transactions=(n.transactions||[]).map(t=>({...t,scope:t.scope||(t.vehicleId?'vehicle':'personal'),title:t.title||t.description||'',category:t.category||'سایر'}));return n}
+function loadState(){const cur=loadJSON(KEY,null);if(cur)return migrate(cur);const old=loadJSON(OLD_KEY,null);return old?migrate(old):defaultState()}
+function persist(auto=true){state.updatedAt=new Date().toISOString();localStorage.setItem(KEY,JSON.stringify(state));renderAll();if(auto)scheduleCloudSave()}
 function uid(){return crypto.randomUUID?crypto.randomUUID():Date.now()+Math.random().toString(16).slice(2)}
+function digits(v){return Number(String(v||'').replace(/[^0-9]/g,''))||0}
+function formatInput(v){const n=String(v||'').replace(/\D/g,'');return n?Number(n).toLocaleString('en-US').replace(/,/g,'/'):''}
 function money(v){return new Intl.NumberFormat('fa-IR').format(Number(v||0))+' تومان'}
-function digits(v){return Number(String(v).replace(/[^0-9]/g,''))||0}
-function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2200)}
-function todayJalali(){return new Intl.DateTimeFormat('fa-IR-u-ca-persian',{year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replace(/\u200e/g,'')}
 function esc(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-
-function accountBalance(id){
-  const a=state.accounts.find(x=>x.id===id); let b=Number(a?.openingBalance||0);
-  for(const t of state.transactions){
-    if(t.type==='income'&&t.accountId===id)b+=t.amount;
-    if(t.type==='expense'&&t.accountId===id)b-=t.amount;
-    if(t.type==='transfer'){if(t.fromAccountId===id)b-=t.amount;if(t.toAccountId===id)b+=t.amount;}
-  }return b;
-}
-
-function renderAll(){renderSelects();renderAccounts();renderVehicles();renderDashboard();renderReports();renderCloudStatus();}
-function renderSelects(){
-  const accountOptions=state.accounts.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');
-  ['txAccount','transferFrom','transferTo'].forEach(id=>document.getElementById(id).innerHTML=accountOptions||'<option value="">ابتدا حساب بسازید</option>');
-  const vehicleOptions=state.vehicles.map(v=>`<option value="${v.id}">${esc(v.name)}</option>`).join('');
-  document.getElementById('txVehicle').innerHTML='<option value="">بدون خودرو / شخصی</option>'+vehicleOptions;
-  document.getElementById('reportVehicle').innerHTML='<option value="all">همه</option><option value="">بدون خودرو / شخصی</option>'+vehicleOptions;
-}
-function renderAccounts(){
-  const el=document.getElementById('accountList');
-  if(!state.accounts.length){el.className='list empty';el.textContent='هنوز حسابی ثبت نشده است.';return}
-  el.className='list';el.innerHTML=state.accounts.map(a=>`<div class="item"><div class="item-main"><div class="item-title">${esc(a.name)}</div><div class="item-meta">موجودی فعلی: ${money(accountBalance(a.id))}</div></div><div class="item-actions"><button onclick="removeAccount('${a.id}')">حذف</button></div></div>`).join('');
-}
-function renderVehicles(){
-  const el=document.getElementById('vehicleList');
-  if(!state.vehicles.length){el.className='list empty';el.textContent='هنوز خودرویی ثبت نشده است.';return}
-  el.className='list';el.innerHTML=state.vehicles.map(v=>`<div class="item"><div class="item-title">${esc(v.name)}</div><div class="item-actions"><button onclick="renameVehicle('${v.id}')">تغییر نام</button><button onclick="removeVehicle('${v.id}')">حذف</button></div></div>`).join('');
-}
-function txTitle(t){if(t.type==='income')return 'واریزی';if(t.type==='expense')return 'هزینه';return 'انتقال بین حساب‌ها'}
-function txMeta(t){
-  const vehicle=state.vehicles.find(v=>v.id===t.vehicleId)?.name||'شخصی/عمومی';
-  if(t.type==='transfer')return `${esc(state.accounts.find(a=>a.id===t.fromAccountId)?.name||'-')} ← ${esc(state.accounts.find(a=>a.id===t.toAccountId)?.name||'-')} | ${esc(t.date)}`;
-  return `${esc(state.accounts.find(a=>a.id===t.accountId)?.name||'-')} | ${esc(vehicle)} | ${esc(t.date)}`;
-}
-function txHtml(t){return `<div class="item"><div class="item-main"><div class="item-title">${txTitle(t)}${t.description?' — '+esc(t.description):''}</div><div class="item-meta">${txMeta(t)}</div></div><strong class="amount ${t.type==='income'?'income':'expense'}">${t.type==='expense'?'-':t.type==='income'?'+':''}${money(t.amount)}</strong></div>`}
-function renderDashboard(){
-  const income=state.transactions.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
-  const expense=state.transactions.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
-  const totalBalance=state.accounts.reduce((s,a)=>s+accountBalance(a.id),0);
-  document.getElementById('totalBalance').textContent=money(totalBalance);
-  document.getElementById('totalIncome').textContent=money(income);
-  document.getElementById('totalExpense').textContent=money(expense);
-  document.getElementById('netBalance').textContent=money(income-expense);
-  const el=document.getElementById('recentTransactions');const rows=[...state.transactions].slice(-5).reverse();
-  if(!rows.length){el.className='list empty';el.textContent='هنوز تراکنشی ثبت نشده است.'}else{el.className='list';el.innerHTML=rows.map(txHtml).join('')}
-}
-function renderReports(){
-  const type=document.getElementById('reportType').value;const vehicle=document.getElementById('reportVehicle').value;
-  let rows=[...state.transactions].reverse();
-  if(type!=='all')rows=rows.filter(t=>t.type===type);
-  if(vehicle!=='all')rows=rows.filter(t=>(t.vehicleId||'')===vehicle);
-  const el=document.getElementById('reportList');
-  if(!rows.length){el.className='list empty';el.textContent='رکوردی وجود ندارد.'}else{el.className='list';el.innerHTML=rows.map(txHtml).join('')}
-}
-function setCloudStatus(text,mode=''){
-  const status=document.getElementById('cloudStatus');
-  if(!status)return;
-  status.textContent=text;
-  status.className='cloud-status'+(mode?' '+mode:'');
-}
-function renderCloudStatus(){
-  const status=document.getElementById('cloudStatus');
-  const authBox=document.getElementById('cloudAuthBox');
-  const signedBox=document.getElementById('cloudSignedBox');
-  document.getElementById('cloudUrl').value=cloudConfig.url||DEFAULT_SUPABASE_URL;
-  document.getElementById('cloudKey').value=cloudConfig.key||'';
-  if(cloudSession?.access_token){
-    status.textContent=`متصل به فضای ابری — ${cloudSession.user?.email||'کاربر'} | ذخیره خودکار فعال`;
-    status.className='cloud-status online';
-    authBox.hidden=true;signedBox.hidden=false;
-    document.getElementById('cloudUser').textContent=cloudSession.user?.email||'';
-  }else{
-    status.textContent=cloudConfig.key?'تنظیم شده؛ وارد حساب شوید':'فضای ابری هنوز تنظیم نشده است';
-    status.className='cloud-status';
-    authBox.hidden=false;signedBox.hidden=true;
-  }
-}
-
-document.querySelectorAll('.bottom-nav button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById(b.dataset.page).classList.add('active')}));
-
-document.getElementById('accountForm').addEventListener('submit',e=>{e.preventDefault();state.accounts.push({id:uid(),name:accountName.value.trim(),openingBalance:digits(accountBalance.value)});e.target.reset();accountBalance.value='0';saveLocal();toast('حساب ثبت شد')});
-document.getElementById('vehicleForm').addEventListener('submit',e=>{e.preventDefault();state.vehicles.push({id:uid(),name:vehicleName.value.trim()});e.target.reset();saveLocal();toast('خودرو اضافه شد')});
-document.getElementById('transactionForm').addEventListener('submit',e=>{e.preventDefault();if(!txAccount.value)return toast('ابتدا یک حساب بسازید');state.transactions.push({id:uid(),type:txType.value,accountId:txAccount.value,vehicleId:txVehicle.value,amount:digits(txAmount.value),date:txDate.value,description:txDescription.value.trim()});e.target.reset();txDate.value=todayJalali();saveLocal();toast('تراکنش ثبت شد')});
-document.getElementById('transferForm').addEventListener('submit',e=>{e.preventDefault();if(!transferFrom.value||!transferTo.value)return toast('ابتدا دو حساب بسازید');if(transferFrom.value===transferTo.value)return toast('حساب مبدا و مقصد یکسان است');state.transactions.push({id:uid(),type:'transfer',fromAccountId:transferFrom.value,toAccountId:transferTo.value,amount:digits(transferAmount.value),date:transferDate.value,description:transferDescription.value.trim()});e.target.reset();transferDate.value=todayJalali();saveLocal();toast('انتقال ثبت شد')});
-document.getElementById('applyReport').addEventListener('click',renderReports);
-
-document.getElementById('exportBackup').addEventListener('click',()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='hesab-man-backup.json';a.click();URL.revokeObjectURL(a.href)});
-document.getElementById('importBackup').addEventListener('change',async e=>{try{state={...emptyState(),...JSON.parse(await e.target.files[0].text())};saveLocal();toast('پشتیبان بازیابی شد')}catch{toast('فایل پشتیبان معتبر نیست')}});
-document.getElementById('resetApp').addEventListener('click',()=>{if(confirm('همه اطلاعات محلی پاک شود؟')){state=emptyState();saveLocal();toast('اطلاعات محلی پاک شد')}});
-
-window.removeAccount=id=>{if(state.transactions.some(t=>t.accountId===id||t.fromAccountId===id||t.toAccountId===id))return toast('این حساب سابقه تراکنش دارد');if(confirm('حساب حذف شود؟')){state.accounts=state.accounts.filter(a=>a.id!==id);saveLocal()}};
-window.removeVehicle=id=>{if(state.transactions.some(t=>t.vehicleId===id))return toast('این خودرو سابقه تراکنش دارد');if(confirm('خودرو حذف شود؟')){state.vehicles=state.vehicles.filter(v=>v.id!==id);saveLocal()}};
-window.renameVehicle=id=>{const v=state.vehicles.find(x=>x.id===id);const name=prompt('نام جدید خودرو',v.name);if(name?.trim()){v.name=name.trim();saveLocal()}};
-
-function normalizeUrl(url){return String(url||'').trim().replace(/\/rest\/v1\/?$/,'').replace(/\/$/,'')}
-function cloudHeaders(withAuth=true){
-  const h={'apikey':cloudConfig.key,'Content-Type':'application/json'};
-  if(withAuth&&cloudSession?.access_token)h.Authorization=`Bearer ${cloudSession.access_token}`;
-  return h;
-}
-async function cloudFetch(path,options={}){
-  if(!cloudConfig.url||!cloudConfig.key)throw new Error('ابتدا آدرس و کلید Supabase را ذخیره کنید');
-  const res=await fetch(`${normalizeUrl(cloudConfig.url)}${path}`,{...options,headers:{...cloudHeaders(options.auth!==false),...(options.headers||{})}});
-  const text=await res.text();let body=null;try{body=text?JSON.parse(text):null}catch{body=text}
-  if(!res.ok)throw new Error(body?.msg||body?.message||body?.error_description||body?.error||`خطای ${res.status}`);
-  return body;
-}
-function persistSession(session){cloudSession=session;localStorage.setItem(SESSION_KEY,JSON.stringify(session));renderCloudStatus()}
-async function signIn(email,password){
-  const data=await cloudFetch('/auth/v1/token?grant_type=password',{method:'POST',auth:false,body:JSON.stringify({email,password})});persistSession(data);await cloudPull(true);
-}
-async function signUp(email,password){
-  const data=await cloudFetch('/auth/v1/signup',{method:'POST',auth:false,body:JSON.stringify({email,password})});
-  if(data?.access_token){persistSession(data);await cloudPush()}else toast('ثبت‌نام انجام شد؛ ایمیل تأیید را بررسی کنید');
-}
-async function refreshSession(){
-  if(!cloudSession?.refresh_token)return false;
-  try{const data=await cloudFetch('/auth/v1/token?grant_type=refresh_token',{method:'POST',auth:false,body:JSON.stringify({refresh_token:cloudSession.refresh_token})});persistSession(data);return true}catch{return false}
-}
-async function cloudPush(showToast=false){
-  if(!cloudSession?.user?.id)return;
-  const now=new Date().toISOString();
-  try{
-    setCloudStatus('در حال ذخیره خودکار در ابر…','online');
-    await cloudFetch('/rest/v1/cloud_states?on_conflict=user_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:cloudSession.user.id,payload:state,updated_at:now})});
-    localStorage.setItem(CLOUD_SYNCED_KEY,now);
-    setCloudStatus(`ذخیره خودکار انجام شد — ${cloudSession.user?.email||'کاربر'}`,'online');
-    if(showToast)toast('اطلاعات در فضای ابری ذخیره شد');
-  }catch(err){
-    setCloudStatus('ذخیره محلی انجام شد؛ همگام‌سازی پس از اتصال اینترنت','');
-    if(String(err.message).includes('JWT')){if(await refreshSession())return cloudPush(showToast)}
-    throw err;
-  }
-}
-async function cloudPull(confirmReplace=false){
-  if(!cloudSession?.user?.id)return;
-  const rows=await cloudFetch(`/rest/v1/cloud_states?user_id=eq.${encodeURIComponent(cloudSession.user.id)}&select=payload,updated_at&limit=1`);
-  if(rows?.length&&rows[0].payload){
-    if(!confirmReplace||!state.transactions.length||confirm('اطلاعات ابری جایگزین اطلاعات فعلی شود؟')){
-      state={...emptyState(),...rows[0].payload};
-      localStorage.setItem(KEY,JSON.stringify(state));
-      localStorage.setItem(LOCAL_UPDATED_KEY,rows[0].updated_at||new Date().toISOString());
-      localStorage.setItem(CLOUD_SYNCED_KEY,rows[0].updated_at||new Date().toISOString());
-      renderAll();toast('اطلاعات ابری دریافت شد');
-    }
-  }else{await cloudPush();if(confirmReplace)toast('نسخه اولیه در فضای ابری ساخته شد')}
-}
-async function smartCloudSync(){
-  if(!cloudSession?.user?.id||!navigator.onLine)return;
-  try{
-    const rows=await cloudFetch(`/rest/v1/cloud_states?user_id=eq.${encodeURIComponent(cloudSession.user.id)}&select=payload,updated_at&limit=1`);
-    if(!rows?.length){await cloudPush();return}
-    const remoteTime=Date.parse(rows[0].updated_at||0)||0;
-    const localTime=Date.parse(localStorage.getItem(LOCAL_UPDATED_KEY)||0)||0;
-    if(remoteTime>localTime&&rows[0].payload){
-      state={...emptyState(),...rows[0].payload};
-      localStorage.setItem(KEY,JSON.stringify(state));
-      localStorage.setItem(LOCAL_UPDATED_KEY,rows[0].updated_at);
-      localStorage.setItem(CLOUD_SYNCED_KEY,rows[0].updated_at);
-      renderAll();
-      setCloudStatus(`آخرین اطلاعات از ابر دریافت شد — ${cloudSession.user?.email||'کاربر'}`,'online');
-    }else if(localTime>remoteTime){
-      await cloudPush();
-    }else{
-      setCloudStatus(`همگام و به‌روز — ${cloudSession.user?.email||'کاربر'}`,'online');
-    }
-  }catch(e){setCloudStatus('فعلاً آفلاین؛ تغییرات محلی محفوظ است','')}
-}
-function scheduleCloudSave(){
-  clearTimeout(syncTimer);
-  if(cloudSession?.access_token)syncTimer=setTimeout(()=>cloudPush().catch(()=>{}),700);
-}
-
-document.getElementById('saveCloudConfig').addEventListener('click',()=>{
-  const url=normalizeUrl(document.getElementById('cloudUrl').value);const key=document.getElementById('cloudKey').value.trim();
-  if(!url||!key)return toast('آدرس و کلید را کامل وارد کنید');
-  cloudConfig={url,key};localStorage.setItem(CLOUD_KEY,JSON.stringify(cloudConfig));renderCloudStatus();toast('تنظیمات Supabase ذخیره شد');
-});
-document.getElementById('cloudLoginForm').addEventListener('submit',async e=>{e.preventDefault();try{toast('در حال ورود...');await signIn(cloudEmail.value.trim(),cloudPassword.value);toast('ورود موفق بود')}catch(err){toast('ورود ناموفق: '+err.message)}});
-document.getElementById('cloudSignup').addEventListener('click',async()=>{try{toast('در حال ثبت‌نام...');await signUp(cloudEmail.value.trim(),cloudPassword.value)}catch(err){toast('ثبت‌نام ناموفق: '+err.message)}});
-document.getElementById('cloudPush').addEventListener('click',()=>cloudPush(true).catch(e=>toast(e.message)));
-document.getElementById('cloudPull').addEventListener('click',()=>cloudPull(true).catch(e=>toast(e.message)));
-document.getElementById('cloudLogout').addEventListener('click',()=>{cloudSession=null;localStorage.removeItem(SESSION_KEY);renderCloudStatus();toast('از حساب خارج شدید')});
-
-txDate.value=transferDate.value=todayJalali();renderAll();
-if(cloudSession?.access_token)setTimeout(()=>smartCloudSync(),300);
-window.addEventListener('online',()=>smartCloudSync());
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')smartCloudSync()});
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+function today(){return new Intl.DateTimeFormat('fa-IR-u-ca-persian',{year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replace(/\u200e/g,'')}
+function currentMonth(){return today().slice(0,7)}function currentYear(){return today().slice(0,4)}
+function toast(m){toastEl.textContent=m;toastEl.classList.add('show');setTimeout(()=>toastEl.classList.remove('show'),2200)}
+const toastEl=document.getElementById('toast');
+function accountBalance(id){const a=state.accounts.find(x=>x.id===id);let b=Number(a?.openingBalance||0);for(const t of state.transactions){if(t.type==='income'&&t.accountId===id)b+=t.amount;if((t.type==='expense'||t.type==='salary')&&t.accountId===id)b-=t.amount;if(t.type==='transfer'){if(t.fromAccountId===id)b-=t.amount;if(t.toAccountId===id)b+=t.amount}}return b}
+function opt(arr,empty='انتخاب کنید'){return `<option value="">${empty}</option>`+arr.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}
+function updateSelects(){const acc=opt(state.accounts,'ابتدا حساب بسازید');['txAccount','transferFrom','transferTo','salaryAccount'].forEach(id=>document.getElementById(id).innerHTML=acc);const veh=opt(state.vehicles,'انتخاب خودرو');txVehicle.innerHTML=veh;driverVehicle.innerHTML=veh;salaryDriver.innerHTML=opt(state.drivers,'انتخاب راننده');updateCategoryOptions()}
+function updateCategoryOptions(){const scope=txScope.value;txCategory.innerHTML=(state.categories[scope]||[]).map(c=>`<option>${esc(c)}</option>`).join('');vehicleWrap.style.display=scope==='vehicle'?'flex':'none';vehicleDetails.style.display=scope==='vehicle'&&txType.value==='expense'?'grid':'none'}
+function txLabel(t){return t.type==='income'?'واریزی':t.type==='expense'?'هزینه':t.type==='salary'?'حقوق راننده':'انتقال'}
+function txEntity(t){if(t.type==='salary'){const d=state.drivers.find(x=>x.id===t.driverId);return d?`${d.name} — ${state.vehicles.find(v=>v.id===d.vehicleId)?.name||''}`:'حقوق راننده'}if(t.scope==='vehicle')return state.vehicles.find(v=>v.id===t.vehicleId)?.name||'خودرو';return 'خانه و شخصی'}
+function txCard(t,actions=true){const acc=t.type==='transfer'?`${state.accounts.find(a=>a.id===t.fromAccountId)?.name||'-'} ← ${state.accounts.find(a=>a.id===t.toAccountId)?.name||'-'}`:state.accounts.find(a=>a.id===t.accountId)?.name||'-';const details=[t.category,txEntity(t),acc,t.date,t.mechanic?`تعمیرکار: ${t.mechanic}`:'',t.parts?`قطعات: ${t.parts}`:''].filter(Boolean).map(esc).join(' | ');return `<div class="item"><div class="item-main"><div class="item-title">${txLabel(t)} — ${esc(t.title||t.description||'')}</div><div class="item-meta">${details}</div></div><strong class="amount ${t.type==='income'?'income':'expense'}">${t.type==='income'?'+':t.type==='transfer'?'':'-'}${money(t.amount)}</strong>${actions?`<div class="item-actions">${t.type!=='transfer'?`<button onclick="editTx('${t.id}')">ویرایش</button>`:''}<button onclick="viewTx('${t.id}')">جزئیات</button><button onclick="deleteTx('${t.id}')">حذف</button></div>`:''}</div>`}
+function renderAccounts(){accountList.innerHTML=state.accounts.length?state.accounts.map(a=>`<div class="item"><div><div class="item-title">${esc(a.name)}</div><div class="item-meta">موجودی: ${money(accountBalance(a.id))}</div></div><div class="item-actions"><button onclick="editAccount('${a.id}')">ویرایش</button><button onclick="deleteAccount('${a.id}')">حذف</button></div></div>`).join(''):'حسابی ثبت نشده است.'}
+function renderVehicles(){vehicleList.innerHTML=state.vehicles.length?state.vehicles.map(v=>`<div class="item"><b>${esc(v.name)}</b><div class="item-actions"><button onclick="renameVehicle('${v.id}')">تغییر نام</button><button onclick="deleteVehicle('${v.id}')">حذف</button></div></div>`).join(''):'خودرویی ثبت نشده است.'}
+function renderDrivers(){driverList.innerHTML=state.drivers.length?state.drivers.map(d=>`<div class="item"><div><b>${esc(d.name)}</b><div class="item-meta">${esc(state.vehicles.find(v=>v.id===d.vehicleId)?.name||'-')} | حقوق پایه: ${money(d.baseSalary)}</div></div><div class="item-actions"><button onclick="editDriver('${d.id}')">ویرایش</button><button onclick="deleteDriver('${d.id}')">حذف</button></div></div>`).join(''):'راننده‌ای ثبت نشده است.'}
+function renderSalaries(){const rows=state.transactions.filter(t=>t.type==='salary').reverse();salaryList.innerHTML=rows.length?rows.map(t=>txCard(t,true)).join(''):'پرداخت حقوقی ثبت نشده است.'}
+function renderCategories(){for(const scope of ['vehicle','personal']){const el=document.getElementById(scope+'CategoryList');el.innerHTML=(state.categories[scope]||[]).map(c=>`<span class="chip">${esc(c)}<button onclick="removeCategory('${scope}','${encodeURIComponent(c)}')">×</button></span>`).join('')}}
+function filteredTransactions(){let rows=[...state.transactions].reverse();if(filterType.value!=='all')rows=rows.filter(t=>t.type===filterType.value);if(filterScope.value!=='all')rows=rows.filter(t=>t.scope===filterScope.value);if(filterMonth.value)rows=rows.filter(t=>(t.date||'').startsWith(filterMonth.value));const q=filterSearch.value.trim().toLowerCase();if(q)rows=rows.filter(t=>JSON.stringify(t).toLowerCase().includes(q)||txEntity(t).toLowerCase().includes(q));return rows}
+function renderTransactions(){const rows=filteredTransactions();transactionList.innerHTML=rows.length?rows.map(t=>txCard(t,true)).join(''):'رکوردی وجود ندارد.'}
+function periodRows(type,period,scope='all'){return state.transactions.filter(t=>{const date=t.date||'';const ok=type==='month'?date.startsWith(period):date.startsWith(period.slice(0,4));return ok&&(scope==='all'||t.scope===scope)})}
+function renderDashboard(){const mode=dashPeriod.value;const p=mode==='month'?currentMonth():mode==='year'?currentYear():'';const rows=mode==='all'?state.transactions:periodRows(mode,p);const inc=rows.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0),exp=rows.filter(t=>['expense','salary'].includes(t.type)).reduce((s,t)=>s+t.amount,0);totalBalance.textContent=money(state.accounts.reduce((s,a)=>s+accountBalance(a.id),0));totalIncome.textContent=money(inc);totalExpense.textContent=money(exp);netBalance.textContent=money(inc-exp);recentTransactions.innerHTML=state.transactions.length?[...state.transactions].slice(-5).reverse().map(t=>txCard(t,false)).join(''):'هنوز تراکنشی ثبت نشده است.';const cats={};rows.filter(t=>['expense','salary'].includes(t.type)).forEach(t=>cats[t.category||'حقوق راننده']=(cats[t.category||'حقوق راننده']||0)+t.amount);const top=Object.entries(cats).sort((a,b)=>b[1]-a[1])[0];dashInsights.innerHTML=`<div class="insight">بیشترین هزینه<b>${top?esc(top[0])+' — '+money(top[1]):'—'}</b></div><div class="insight">تعداد تراکنش<b>${rows.length}</b></div><div class="insight">میانگین هزینه<b>${money(rows.filter(t=>['expense','salary'].includes(t.type)).length?exp/rows.filter(t=>['expense','salary'].includes(t.type)).length:0)}</b></div>`}
+function barsHtml(map){const arr=Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,8),max=arr[0]?.[1]||1;return arr.length?arr.map(([k,v])=>`<div class="bar-row"><span>${esc(k)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.max(4,v/max*100)}%"></div></div><b>${money(v)}</b></div>`).join(''):'داده‌ای وجود ندارد.'}
+function renderReports(){const type=reportPeriodType.value,period=reportPeriod.value|| (type==='month'?currentMonth():currentYear()),scope=reportScope.value;reportPeriod.value=period;const rows=periodRows(type,period,scope),inc=rows.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0),exp=rows.filter(t=>['expense','salary'].includes(t.type)).reduce((s,t)=>s+t.amount,0);reportIncome.textContent=money(inc);reportExpense.textContent=money(exp);reportNet.textContent=money(inc-exp);reportCount.textContent=rows.length;const em={},im={};rows.filter(t=>['expense','salary'].includes(t.type)).forEach(t=>em[t.category||'حقوق راننده']=(em[t.category||'حقوق راننده']||0)+t.amount);rows.filter(t=>t.type==='income').forEach(t=>im[t.category||t.title||'درآمد']=(im[t.category||t.title||'درآمد']||0)+t.amount);topExpenses.innerHTML=barsHtml(em);topIncomes.innerHTML=barsHtml(im);const ym={};state.transactions.forEach(t=>{if(!t.date)return;const m=t.date.slice(0,7);ym[m]??={i:0,e:0};if(t.type==='income')ym[m].i+=t.amount;if(['expense','salary'].includes(t.type))ym[m].e+=t.amount});const months=Object.entries(ym).sort((a,b)=>a[0].localeCompare(b[0])).slice(-12),max=Math.max(1,...months.flatMap(([,v])=>[v.i,v.e]));monthComparison.innerHTML=months.length?months.map(([m,v])=>`<div class="bar-row"><span>${m}</span><div><div class="bar-track"><div class="bar-fill" style="width:${v.i/max*100}%"></div></div><div class="bar-track" style="margin-top:4px"><div class="bar-fill" style="width:${v.e/max*100}%;background:linear-gradient(90deg,#be123c,#fb7185)"></div></div></div><b>${money(v.i-v.e)}</b></div>`).join(''):'داده‌ای وجود ندارد.'}
+function renderAll(){updateSelects();renderAccounts();renderVehicles();renderDrivers();renderSalaries();renderCategories();renderTransactions();renderDashboard();renderReports();renderCloudStatus()}
+['txAmount','transferAmount','driverBaseSalary','salaryAmount','accountOpening'].forEach(id=>document.getElementById(id).addEventListener('input',e=>{const pos=e.target.selectionStart;e.target.value=formatInput(e.target.value);try{e.target.setSelectionRange(pos,pos)}catch{}}));
+document.querySelectorAll('.bottom-nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.bottom-nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));document.getElementById(b.dataset.page).classList.add('active');renderAll()});
+txScope.onchange=updateCategoryOptions;txType.onchange=updateCategoryOptions;dashPeriod.onchange=renderDashboard;[filterType,filterScope,filterMonth,filterSearch].forEach(x=>x.oninput=renderTransactions);applyReport.onclick=renderReports;reportPeriodType.onchange=()=>{reportPeriod.placeholder=reportPeriodType.value==='month'?'1405/04':'1405'};
+accountForm.onsubmit=e=>{e.preventDefault();const id=accountEditId.value,obj={name:accountName.value.trim(),openingBalance:digits(accountOpening.value)};if(id)Object.assign(state.accounts.find(x=>x.id===id),obj);else state.accounts.push({id:uid(),...obj});e.target.reset();accountOpening.value='0';accountEditId.value='';accountCancel.hidden=true;persist();toast('حساب ذخیره شد')};accountCancel.onclick=()=>{accountForm.reset();accountEditId.value='';accountOpening.value='0';accountCancel.hidden=true};
+vehicleForm.onsubmit=e=>{e.preventDefault();state.vehicles.push({id:uid(),name:vehicleName.value.trim()});e.target.reset();persist();toast('خودرو اضافه شد')};
+driverForm.onsubmit=e=>{e.preventDefault();const id=driverEditId.value,obj={name:driverName.value.trim(),vehicleId:driverVehicle.value,baseSalary:digits(driverBaseSalary.value)};if(id)Object.assign(state.drivers.find(x=>x.id===id),obj);else state.drivers.push({id:uid(),...obj});e.target.reset();driverEditId.value='';driverCancel.hidden=true;persist();toast('راننده ذخیره شد')};driverCancel.onclick=()=>{driverForm.reset();driverEditId.value='';driverCancel.hidden=true};
+transactionForm.onsubmit=e=>{e.preventDefault();const id=txEditId.value,obj={type:txType.value,accountId:txAccount.value,scope:txScope.value,vehicleId:txScope.value==='vehicle'?txVehicle.value:'',category:txCategory.value,amount:digits(txAmount.value),date:txDate.value,title:txTitle.value.trim(),workDone:txWorkDone.value.trim(),parts:txParts.value.trim(),mechanic:txMechanic.value.trim(),reason:txReason.value.trim(),description:txDescription.value.trim()};if(id)Object.assign(state.transactions.find(x=>x.id===id),obj);else state.transactions.push({id:uid(),...obj});resetTxForm();persist();toast(id?'تراکنش ویرایش شد':'تراکنش ثبت شد')};function resetTxForm(){transactionForm.reset();txEditId.value='';txDate.value=today();txScope.value='vehicle';txType.value='expense';txSubmit.textContent='ثبت تراکنش';txCancelEdit.hidden=true;updateCategoryOptions()}txCancelEdit.onclick=resetTxForm;
+transferForm.onsubmit=e=>{e.preventDefault();if(transferFrom.value===transferTo.value)return toast('حساب مبدا و مقصد یکسان است');state.transactions.push({id:uid(),type:'transfer',fromAccountId:transferFrom.value,toAccountId:transferTo.value,amount:digits(transferAmount.value),date:transferDate.value,description:transferDescription.value.trim(),title:transferDescription.value.trim()});e.target.reset();transferDate.value=today();persist();toast('انتقال ثبت شد')};
+salaryForm.onsubmit=e=>{e.preventDefault();const id=salaryEditId.value,d=state.drivers.find(x=>x.id===salaryDriver.value),obj={type:'salary',scope:'vehicle',category:'حقوق راننده',driverId:salaryDriver.value,vehicleId:d?.vehicleId||'',accountId:salaryAccount.value,month:salaryMonth.value,amount:digits(salaryAmount.value),date:salaryDate.value,title:`حقوق ${d?.name||''} - ${salaryMonth.value}`,description:salaryDescription.value.trim()};if(id)Object.assign(state.transactions.find(x=>x.id===id),obj);else state.transactions.push({id:uid(),...obj});e.target.reset();salaryEditId.value='';salaryDate.value=today();salaryMonth.value=currentMonth();salaryCancel.hidden=true;persist();toast('پرداخت حقوق ذخیره شد')};salaryCancel.onclick=()=>{salaryForm.reset();salaryEditId.value='';salaryDate.value=today();salaryMonth.value=currentMonth();salaryCancel.hidden=true};
+vehicleCategoryForm.onsubmit=e=>{e.preventDefault();const n=vehicleCategoryName.value.trim();if(n&&!state.categories.vehicle.includes(n))state.categories.vehicle.push(n);e.target.reset();persist()};personalCategoryForm.onsubmit=e=>{e.preventDefault();const n=personalCategoryName.value.trim();if(n&&!state.categories.personal.includes(n))state.categories.personal.push(n);e.target.reset();persist()};
+window.editAccount=id=>{const a=state.accounts.find(x=>x.id===id);accountEditId.value=id;accountName.value=a.name;accountOpening.value=formatInput(a.openingBalance);accountCancel.hidden=false};window.deleteAccount=id=>{if(state.transactions.some(t=>t.accountId===id||t.fromAccountId===id||t.toAccountId===id))return toast('این حساب سابقه دارد');if(confirm('حذف حساب؟')){state.accounts=state.accounts.filter(x=>x.id!==id);persist()}};window.renameVehicle=id=>{const v=state.vehicles.find(x=>x.id===id),n=prompt('نام جدید',v.name);if(n?.trim()){v.name=n.trim();persist()}};window.deleteVehicle=id=>{if(state.transactions.some(t=>t.vehicleId===id)||state.drivers.some(d=>d.vehicleId===id))return toast('این خودرو سابقه یا راننده دارد');if(confirm('حذف خودرو؟')){state.vehicles=state.vehicles.filter(x=>x.id!==id);persist()}};window.editDriver=id=>{const d=state.drivers.find(x=>x.id===id);driverEditId.value=id;driverName.value=d.name;driverVehicle.value=d.vehicleId;driverBaseSalary.value=formatInput(d.baseSalary);driverCancel.hidden=false};window.deleteDriver=id=>{if(state.transactions.some(t=>t.driverId===id))return toast('این راننده سابقه حقوق دارد');if(confirm('حذف راننده؟')){state.drivers=state.drivers.filter(x=>x.id!==id);persist()}};window.removeCategory=(s,c)=>{c=decodeURIComponent(c);if(state.transactions.some(t=>t.scope===s&&t.category===c))return toast('این دسته‌بندی سابقه دارد');state.categories[s]=state.categories[s].filter(x=>x!==c);persist()};
+window.editTx=id=>{const t=state.transactions.find(x=>x.id===id);if(t.type==='salary'){salaryEditId.value=id;salaryDriver.value=t.driverId;salaryAccount.value=t.accountId;salaryMonth.value=t.month;salaryAmount.value=formatInput(t.amount);salaryDate.value=t.date;salaryDescription.value=t.description||'';salaryCancel.hidden=false;document.querySelector('[data-page=fleet]').click();return}txEditId.value=id;txType.value=t.type;txAccount.value=t.accountId;txScope.value=t.scope;updateCategoryOptions();txVehicle.value=t.vehicleId||'';txCategory.value=t.category||'';txAmount.value=formatInput(t.amount);txDate.value=t.date;txTitle.value=t.title||'';txWorkDone.value=t.workDone||'';txParts.value=t.parts||'';txMechanic.value=t.mechanic||'';txReason.value=t.reason||'';txDescription.value=t.description||'';txSubmit.textContent='ذخیره ویرایش';txCancelEdit.hidden=false;document.querySelector('[data-page=new]').click()};window.deleteTx=id=>{if(confirm('این رکورد حذف شود؟')){state.transactions=state.transactions.filter(x=>x.id!==id);persist();toast('حذف شد')}};window.viewTx=id=>{const t=state.transactions.find(x=>x.id===id);alert([`نوع: ${txLabel(t)}`,`عنوان: ${t.title||''}`,`مبلغ: ${money(t.amount)}`,`دسته: ${t.category||''}`,`بخش: ${txEntity(t)}`,`تاریخ: ${t.date||''}`,t.workDone&&`کار انجام‌شده: ${t.workDone}`,t.parts&&`قطعات: ${t.parts}`,t.mechanic&&`تعمیرکار: ${t.mechanic}`,t.reason&&`علت: ${t.reason}`,t.description&&`توضیحات: ${t.description}`].filter(Boolean).join('\n'))};
+exportBackup.onclick=()=>{const b=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='hesab-man-backup.json';a.click();URL.revokeObjectURL(a.href)};importBackup.onchange=async e=>{try{state=migrate(JSON.parse(await e.target.files[0].text()));persist();toast('پشتیبان بازیابی شد')}catch{toast('فایل نامعتبر است')}};resetApp.onclick=()=>{if(confirm('همه اطلاعات پاک شود؟')){state=defaultState();persist();toast('اطلاعات پاک شد')}};
+function normalizeUrl(u){return String(u||'').trim().replace(/\/rest\/v1\/?$/,'').replace(/\/$/,'')}
+async function cloudFetch(path,opt={}){if(!cloudConfig.url||!cloudConfig.key)throw Error('تنظیمات Supabase کامل نیست');const headers={'apikey':cloudConfig.key,'Content-Type':'application/json',...(opt.headers||{})};if(opt.auth!==false&&cloudSession?.access_token)headers.Authorization='Bearer '+cloudSession.access_token;const r=await fetch(normalizeUrl(cloudConfig.url)+path,{...opt,headers});const text=await r.text();if(!r.ok)throw Error((()=>{try{return JSON.parse(text).message||JSON.parse(text).error_description}catch{return text||`HTTP ${r.status}`}})());return text?JSON.parse(text):null}
+function persistSession(s){cloudSession=s;localStorage.setItem(SESSION_KEY,JSON.stringify(s));renderCloudStatus()}
+async function signIn(email,password){const s=await cloudFetch('/auth/v1/token?grant_type=password',{method:'POST',auth:false,body:JSON.stringify({email,password})});persistSession(s);await autoReconcile();return s}
+async function signUp(email,password){const s=await cloudFetch('/auth/v1/signup',{method:'POST',auth:false,body:JSON.stringify({email,password})});if(s.access_token){persistSession(s);await autoReconcile()}else toast('ایمیل تأیید را بررسی کنید')}
+async function refreshSession(){if(!cloudSession?.refresh_token)return false;try{persistSession(await cloudFetch('/auth/v1/token?grant_type=refresh_token',{method:'POST',auth:false,body:JSON.stringify({refresh_token:cloudSession.refresh_token})}));return true}catch{return false}}
+async function cloudPush(show=false){if(!cloudSession?.user?.id)return;setCloudStatus('در حال ذخیره خودکار...','syncing');try{await cloudFetch('/rest/v1/cloud_states?on_conflict=user_id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=minimal'},body:JSON.stringify({user_id:cloudSession.user.id,payload:state,updated_at:state.updatedAt})});setCloudStatus('همگام و به‌روز','online');if(show)toast('در ابر ذخیره شد')}catch(e){if(String(e.message).includes('JWT')&&await refreshSession())return cloudPush(show);setCloudStatus('ذخیره ابری ناموفق؛ اطلاعات محلی محفوظ است','');if(show)toast(e.message);throw e}}
+async function getCloud(){const r=await cloudFetch(`/rest/v1/cloud_states?user_id=eq.${encodeURIComponent(cloudSession.user.id)}&select=payload,updated_at&limit=1`);return r?.[0]||null}
+async function cloudPull(force=false){const c=await getCloud();if(!c){await cloudPush();return}if(force||new Date(c.updated_at)>new Date(state.updatedAt)){state=migrate(c.payload);localStorage.setItem(KEY,JSON.stringify(state));renderAll();toast('اطلاعات ابری دریافت شد')}}
+async function autoReconcile(){if(!cloudSession?.user?.id)return;try{const c=await getCloud();if(!c)return cloudPush();if(new Date(c.updated_at)>new Date(state.updatedAt)){state=migrate(c.payload);localStorage.setItem(KEY,JSON.stringify(state));renderAll()}else if(new Date(state.updatedAt)>new Date(c.updated_at))await cloudPush();setCloudStatus('همگام و به‌روز','online')}catch(e){setCloudStatus('فعلاً آفلاین؛ اطلاعات محلی محفوظ است','')}}
+function scheduleCloudSave(){clearTimeout(syncTimer);if(cloudSession?.access_token)syncTimer=setTimeout(()=>cloudPush().catch(()=>{}),900)}
+function setCloudStatus(t,c=''){cloudStatus.textContent=t;cloudStatus.className='cloud-status '+c}
+function renderCloudStatus(){cloudUrl.value=cloudConfig.url||DEFAULT_URL;cloudKey.value=cloudConfig.key||'';if(cloudSession?.access_token){setCloudStatus(`متصل — ${cloudSession.user?.email||''}`,'online');cloudAuthBox.hidden=true;cloudSignedBox.hidden=false;cloudUser.textContent=cloudSession.user?.email||''}else{setCloudStatus(cloudConfig.key?'تنظیم شده؛ وارد شوید':'تنظیم نشده');cloudAuthBox.hidden=false;cloudSignedBox.hidden=true}}
+saveCloudConfig.onclick=()=>{const url=normalizeUrl(cloudUrl.value),key=cloudKey.value.trim();if(!url||!key)return toast('آدرس و کلید را کامل کنید');cloudConfig={url,key};localStorage.setItem(CLOUD_KEY,JSON.stringify(cloudConfig));renderCloudStatus();toast('تنظیمات ذخیره شد')};cloudLoginForm.onsubmit=async e=>{e.preventDefault();try{await signIn(cloudEmail.value.trim(),cloudPassword.value);toast('ورود موفق')}catch(err){toast('ورود ناموفق: '+err.message)}};cloudSignup.onclick=async()=>{try{await signUp(cloudEmail.value.trim(),cloudPassword.value)}catch(e){toast('ثبت‌نام ناموفق: '+e.message)}};cloudPush.onclick=()=>window.cloudPush(true).catch(()=>{});cloudPull.onclick=()=>window.cloudPull(true).catch(e=>toast(e.message));cloudLogout.onclick=()=>{cloudSession=null;localStorage.removeItem(SESSION_KEY);renderCloudStatus();toast('خارج شدید')};window.addEventListener('online',()=>autoReconcile());document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')autoReconcile()});
+txDate.value=transferDate.value=salaryDate.value=today();salaryMonth.value=filterMonth.value=reportPeriod.value=currentMonth();renderAll();if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});setTimeout(()=>autoReconcile(),600);
