@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f5a56">
   <title>حساب من</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=260">
+  <link rel="stylesheet" href="styles-v261.css?v=261">
 </head>
 <body>
 <header class="topbar">
@@ -15,7 +15,7 @@
     <p>مدیریت مالی خودروها، خانه و شخصی</p>
   </div>
   <div class="top-actions">
-    <span class="version">v2.6.0</span>
+    <span class="version">v2.6.1</span>
     <span id="cloudBadge" class="cloud-badge">ذخیره محلی</span>
   </div>
 </header>
@@ -223,6 +223,45 @@
 </div>
 
 <div id="toast" class="toast"></div>
-<script src="app.js?v=260"></script>
+
+<script>
+(function () {
+  function activatePage(name) {
+    document.querySelectorAll('.page').forEach(function (p) {
+      p.classList.toggle('active', p.id === 'page-' + name);
+    });
+    document.querySelectorAll('.bottom-nav button[data-page]').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-page') === name);
+    });
+    try { window.scrollTo(0, 0); } catch (_) {}
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('.bottom-nav button[data-page]');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    activatePage(btn.getAttribute('data-page'));
+  }, true);
+
+  window.__hesabActivatePage = activatePage;
+
+  // Remove stale caches/service workers from previous versions.
+  window.addEventListener('load', function () {
+    if ('caches' in window) {
+      caches.keys().then(function (keys) {
+        return Promise.all(keys.map(function (k) { return caches.delete(k); }));
+      }).catch(function(){});
+    }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (r) { r.unregister(); });
+      }).catch(function(){});
+    }
+  });
+})();
+</script>
+
+<script src="app-v261.js?v=261"></script>
 </body>
 </html>
