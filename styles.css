@@ -87,3 +87,42 @@ main{max-width:900px;margin:auto;padding:16px}
   .chart-row{grid-template-columns:88px 1fr}
   .stats .card strong{font-size:21px}
 }
+
+/* v2.4 stable fixes */
+.native-select-hidden{
+  position:absolute!important;
+  opacity:0!important;
+  pointer-events:none!important;
+  width:1px!important;
+  height:1px!important;
+}
+.picker-trigger{
+  width:100%;
+  min-height:58px;
+  border:1px solid var(--line,#dbe3ee);
+  background:#fff;
+  border-radius:16px;
+  padding:0 16px;
+  font:inherit;
+  text-align:right;
+  color:var(--text,#0f172a);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+}
+.picker-trigger::before{content:"⌄";font-size:22px;color:#64748b}
+.picker-card{max-height:78vh;align-self:flex-end}
+.picker-search{
+  width:100%;box-sizing:border-box;margin:0 0 12px;
+  border:1px solid #dbe3ee;border-radius:14px;padding:12px 14px;font:inherit
+}
+.picker-list{display:grid;gap:8px;max-height:55vh;overflow:auto}
+.picker-option{
+  width:100%;border:1px solid #e2e8f0;background:#fff;border-radius:14px;
+  padding:14px;text-align:right;font:inherit
+}
+.picker-option.selected{border-color:#0f766e;background:#ecfdf5;color:#0f766e;font-weight:700}
+.item.clickable{cursor:pointer}
+.chart-row{cursor:pointer}
+.chart-row:active,.item.clickable:active{transform:scale(.995)}
+.analytics-section-note{font-size:12px;color:#64748b;margin-top:8px}
