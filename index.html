@@ -13,11 +13,11 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=11.3.0" />
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=11.3.0" />
   <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png?v=11.3.0" />
-  <link rel="stylesheet" href="/assets/app-v11.3.0.css" />
+  <link rel="stylesheet" href="/assets/app-v11.3.1.css" />
   <script>
 (() => {
   'use strict';
-  const V='v11.3.0';
+  const V='v11.3.1';
   const CFG='pfm-supabase-config';
   const SESSION='pfm-supabase-session-v3';
   const DATA='pfm-v9.0.0';
@@ -51,7 +51,7 @@
   .pfmFace{border:1px solid #99f6e4;background:linear-gradient(145deg,#ecfdf5,#f0fdfa);color:#065f46}.pfmPrimary{border:0;background:#0f766e;color:#fff}.pfmSecondary{border:1px solid #cbd5e1;background:#fff;color:#334155}
   .pfmFace:disabled,.pfmPrimary:disabled{opacity:.6}.pfmDivider{display:flex;align-items:center;gap:10px;margin:15px 0;color:#94a3b8;font-size:.74rem}.pfmDivider:before,.pfmDivider:after{content:"";height:1px;background:#e2e8f0;flex:1}
   .pfmInput{width:100%;height:52px;border:1px solid #cbd5e1;border-radius:15px;padding:0 14px;margin-bottom:10px;font-size:1rem;outline:none}.pfmInput:focus{border-color:#0f766e;box-shadow:0 0 0 3px rgba(15,118,110,.12)}
-  .pfmMsg{min-height:22px;margin-top:8px;color:#b91c1c;font-size:.8rem;line-height:1.6}.pfmNote{display:block;margin-top:13px;color:#94a3b8;font-size:.7rem;line-height:1.7}.pfmEnroll{display:grid;gap:10px}.pfmEnroll p{color:#475569;line-height:1.85;font-size:.86rem}
+  .pfmForgot{border:0;background:transparent;color:#0f766e;font-weight:800;margin-top:10px;cursor:pointer;font-size:.82rem}.pfmForgot:disabled{opacity:.55}.pfmMsg{min-height:22px;margin-top:8px;color:#b91c1c;font-size:.8rem;line-height:1.6}.pfmNote{display:block;margin-top:13px;color:#94a3b8;font-size:.7rem;line-height:1.7}.pfmEnroll{display:grid;gap:10px}.pfmEnroll p{color:#475569;line-height:1.85;font-size:.86rem}
   #pfmLockNow{position:fixed;left:12px;top:82px;z-index:99999;width:41px;height:41px;border-radius:13px;border:1px solid #dbe5ef;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.11);font-size:17px;cursor:pointer}
   `;
   document.documentElement.appendChild(css);
@@ -140,8 +140,57 @@
     y.onclick=async()=>{y.disabled=true;y.textContent='در حال فعال‌سازی…';try{await enrollFace();unlock()}catch(e){m.textContent=e?.name==='NotAllowedError'?'فعال‌سازی لغو شد؛ می‌توانی با رمز ادامه بدهی.':'Face ID / Passkey در این حالت مرورگر در دسترس نیست.';y.disabled=false;y.textContent='فعال‌سازی Face ID'}};
     n.onclick=unlock;box.append(y,n,m);c.appendChild(box);g.replaceChildren(c);
   }
+  function recoveryParams(){
+    const h=new URLSearchParams(location.hash.replace(/^#/,''));
+    const q=new URLSearchParams(location.search);
+    return {
+      type:h.get('type')||q.get('type')||'',
+      access_token:h.get('access_token')||q.get('access_token')||'',
+      refresh_token:h.get('refresh_token')||q.get('refresh_token')||''
+    };
+  }
+  async function sendRecovery(msg,btn){
+    const cfg=read(CFG,{}), email=sessionEmail();
+    if(!cfg?.url||!cfg?.anonKey){msg.textContent='تنظیمات Supabase پیدا نشد.';return}
+    if(!email){msg.textContent='ایمیل حساب در این دستگاه پیدا نشد.';return}
+    btn.disabled=true;const old=btn.textContent;btn.textContent='در حال ارسال…';msg.textContent='';
+    try{
+      const redirect=location.origin+location.pathname+'?recovery=1';
+      const r=await fetch(cfg.url.replace(/\/+$/,'')+'/auth/v1/recover?redirect_to='+encodeURIComponent(redirect),{
+        method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},body:JSON.stringify({email})
+      });
+      const body=await r.json().catch(()=>null);
+      if(!r.ok)throw new Error(body?.msg||body?.message||body?.error_description||'ارسال لینک بازیابی انجام نشد');
+      msg.style.color='#047857';msg.textContent='لینک بازیابی رمز به ایمیل حساب ارسال شد. ایمیل را باز کن و روی لینک بازیابی بزن؛ اطلاعات مالی حذف یا تغییر نمی‌کند.';
+    }catch(e){msg.style.color='#b91c1c';msg.textContent=e?.message||'ارسال لینک بازیابی انجام نشد.'}
+    finally{btn.disabled=false;btn.textContent=old}
+  }
+  function showResetPassword(token,refresh){
+    const g=ensureGate(),c=base(),msg=document.createElement('div');msg.className='pfmMsg';
+    const title=document.createElement('p');title.style.cssText='color:#475569;line-height:1.8;font-size:.86rem';title.textContent='هویت از طریق ایمیل تأیید شد. رمز جدید حساب را تعیین کن. این کار هیچ تراکنش یا اطلاعات مالی را حذف نمی‌کند.';
+    const p1=document.createElement('input');p1.className='pfmInput';p1.type='password';p1.placeholder='رمز جدید (حداقل ۶ کاراکتر)';p1.autocomplete='new-password';
+    const p2=document.createElement('input');p2.className='pfmInput';p2.type='password';p2.placeholder='تکرار رمز جدید';p2.autocomplete='new-password';
+    const btn=document.createElement('button');btn.className='pfmPrimary';btn.textContent='ذخیره رمز جدید';
+    btn.onclick=async()=>{
+      if(p1.value.length<6){msg.textContent='رمز جدید حداقل ۶ کاراکتر باشد.';return}
+      if(p1.value!==p2.value){msg.textContent='تکرار رمز با رمز جدید یکسان نیست.';return}
+      const cfg=read(CFG,{});btn.disabled=true;btn.textContent='در حال ذخیره…';msg.textContent='';
+      try{
+        const r=await fetch(cfg.url.replace(/\/+$/,'')+'/auth/v1/user',{method:'PUT',headers:{apikey:cfg.anonKey,Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({password:p1.value})});
+        const body=await r.json().catch(()=>null);if(!r.ok)throw new Error(body?.msg||body?.message||body?.error_description||'تغییر رمز انجام نشد');
+        const s=sec(),salt=s.salt||b64u(crypto.getRandomValues(new Uint8Array(16)));setSec({...s,salt,hash:await sha(salt+'|'+p1.value)});
+        if(refresh){const old=read(SESSION,{});write(SESSION,{...old,access_token:token,refresh_token:refresh,user:body||old.user,expires_at:Math.floor(Date.now()/1000)+3600})}
+        history.replaceState(null,'',location.pathname+'?app=v11.3.1');
+        msg.style.color='#047857';msg.textContent='رمز با موفقیت تغییر کرد.';setTimeout(()=>unlock(),700);
+      }catch(e){msg.style.color='#b91c1c';msg.textContent=e?.message||'تغییر رمز انجام نشد.';btn.disabled=false;btn.textContent='ذخیره رمز جدید'}
+    };
+    c.append(title,p1,p2,btn,msg);g.replaceChildren(c);setTimeout(()=>p1.focus(),100);
+  }
+
   function showGate(){
     if(unlocked)return;
+    const rec=recoveryParams();
+    if(rec.type==='recovery'&&rec.access_token){showResetPassword(rec.access_token,rec.refresh_token);return}
     const g=ensureGate(),c=base(),s=sec(),msg=document.createElement('div');msg.className='pfmMsg';
     if(s.face&&s.cred){
       const face=document.createElement('button');face.className='pfmFace';face.textContent='ورود با Face ID';face.onclick=()=>faceLogin(face,msg);c.appendChild(face);
@@ -162,6 +211,7 @@
     };
     btn.onclick=go;inp.onkeydown=e=>{if(e.key==='Enter')go()};
     c.append(inp,btn,msg);
+    const forgot=document.createElement('button');forgot.type='button';forgot.className='pfmForgot';forgot.textContent='رمز را فراموش کرده‌ام';forgot.onclick=()=>sendRecovery(msg,forgot);c.appendChild(forgot);
     const note=document.createElement('small');note.className='pfmNote';note.textContent='این همان رمز قبلی حساب ابری است. بعد از یک ورود موفق، در حالت آفلاین هم قابل بررسی خواهد بود.';c.appendChild(note);
     g.replaceChildren(c);setTimeout(()=>{if(!s.face)inp.focus()},120);
   }
@@ -180,7 +230,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
 </script>
-  <script type="module" crossorigin src="/assets/app-v11.3.0.js"></script>
+  <script type="module" crossorigin src="/assets/app-v11.3.1.js"></script>
 </head>
 <body>
   <div id="root"></div>

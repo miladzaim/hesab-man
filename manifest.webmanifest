@@ -2,7 +2,7 @@
   "name": "حساب من",
   "short_name": "حساب من",
   "description": "مدیریت مالی خودروها، حساب‌ها و هزینه‌ها",
-  "start_url": "/?app=v11.3.0",
+  "start_url": "/?app=v11.3.1",
   "scope": "/",
   "display": "standalone",
   "background_color": "#062e33",
