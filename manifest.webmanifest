@@ -2,26 +2,26 @@
   "name": "حساب من",
   "short_name": "حساب من",
   "description": "مدیریت مالی خودروها، حساب‌ها و هزینه‌ها",
-  "start_url": "/?app=v11.3.2",
+  "start_url": "/?app=v11.3.3",
   "scope": "/",
   "display": "standalone",
   "background_color": "#062e33",
   "theme_color": "#075354",
   "icons": [
     {
-      "src": "/icon-192.png?v=11.3.2",
+      "src": "/icon-192.png?v=11.3.3",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-512.png?v=11.3.2",
+      "src": "/icon-512.png?v=11.3.3",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-1024.png?v=11.3.2",
+      "src": "/icon-1024.png?v=11.3.3",
       "sizes": "1024x1024",
       "type": "image/png",
       "purpose": "any maskable"

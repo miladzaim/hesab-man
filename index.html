@@ -13,11 +13,11 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=11.3.2" />
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=11.3.2" />
   <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png?v=11.3.2" />
-  <link rel="stylesheet" href="/assets/app-v11.3.2.css" />
+  <link rel="stylesheet" href="/assets/app-v11.3.3.css" />
   <script>
 (() => {
   'use strict';
-  const V='v11.3.2';
+  const V='v11.3.3';
   const CFG='pfm-supabase-config';
   const SESSION='pfm-supabase-session-v3';
   const DATA='pfm-v9.0.0';
@@ -192,9 +192,14 @@
     };
   }
   async function sendRecovery(msg,btn){
-    const cfg=ensureCloudConfig(), email=sessionEmail();
+    const cfg=ensureCloudConfig();
     if(!cfg?.url||!cfg?.anonKey){msg.textContent='تنظیمات Supabase پیدا نشد.';return}
-    if(!email){msg.textContent='ایمیل حساب در این دستگاه پیدا نشد.';return}
+    let email=sessionEmail();
+    if(!email){
+      email=String(prompt('ایمیل همان حساب Supabase را وارد کن:')||'').trim().toLowerCase();
+      if(!email)return;
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){msg.textContent='فرمت ایمیل صحیح نیست.';return}
+    }
     btn.disabled=true;const old=btn.textContent;btn.textContent='در حال ارسال…';msg.textContent='';
     try{
       const redirect=location.origin+location.pathname+'?recovery=1';
@@ -203,7 +208,8 @@
       });
       const body=await r.json().catch(()=>null);
       if(!r.ok)throw new Error(body?.msg||body?.message||body?.error_description||'ارسال لینک بازیابی انجام نشد');
-      msg.style.color='#047857';msg.textContent='لینک بازیابی رمز به ایمیل حساب ارسال شد. ایمیل را باز کن و روی لینک بازیابی بزن؛ اطلاعات مالی حذف یا تغییر نمی‌کند.';
+      sessionStorage.setItem('pfm-recovery-email',email);
+      msg.style.color='#047857';msg.textContent='لینک بازیابی رمز ارسال شد. ایمیل را باز کن و روی لینک بازیابی بزن؛ هیچ اطلاعات مالی حذف یا تغییر نمی‌کند.';
     }catch(e){msg.style.color='#b91c1c';msg.textContent=e?.message||'ارسال لینک بازیابی انجام نشد.'}
     finally{btn.disabled=false;btn.textContent=old}
   }
@@ -222,7 +228,7 @@
         const body=await r.json().catch(()=>null);if(!r.ok)throw new Error(body?.msg||body?.message||body?.error_description||'تغییر رمز انجام نشد');
         const s=sec(),salt=s.salt||b64u(crypto.getRandomValues(new Uint8Array(16)));setSec({...s,salt,hash:await sha(salt+'|'+p1.value)});
         if(refresh){const old=read(SESSION,{});write(SESSION,{...old,access_token:token,refresh_token:refresh,user:body||old.user,expires_at:Math.floor(Date.now()/1000)+3600})}
-        history.replaceState(null,'',location.pathname+'?app=v11.3.2');
+        history.replaceState(null,'',location.pathname+'?app=v11.3.3');
         msg.style.color='#047857';msg.textContent='رمز با موفقیت تغییر کرد.';setTimeout(()=>unlock(),700);
       }catch(e){msg.style.color='#b91c1c';msg.textContent=e?.message||'تغییر رمز انجام نشد.';btn.disabled=false;btn.textContent='ذخیره رمز جدید'}
     };
@@ -277,7 +283,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
 </script>
-  <script type="module" crossorigin src="/assets/app-v11.3.2.js"></script>
+  <script type="module" crossorigin src="/assets/app-v11.3.3.js"></script>
 </head>
 <body>
   <div id="root"></div>
