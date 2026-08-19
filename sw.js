@@ -1,5 +1,5 @@
-const CACHE='hesab-man-v11.3.4';
-const CORE=['/','/index.html','/assets/app-v11.3.4.js','/assets/app-v11.3.4.css','/manifest.webmanifest','/icon-192.png','/icon-512.png','/apple-touch-icon.png'];
+const CACHE='hesab-man-v11.3.5';
+const CORE=['/','/index.html','/assets/app-v11.3.5.js','/assets/app-v11.3.5.css','/manifest.webmanifest','/icon-192.png','/icon-512.png','/apple-touch-icon.png'];
 self.addEventListener('install',e=>{self.skipWaiting();e.waitUntil(caches.open(CACHE).then(c=>c.addAll(CORE).catch(()=>{})))});
 self.addEventListener('activate',e=>{e.waitUntil((async()=>{for(const k of await caches.keys())if(k!==CACHE)await caches.delete(k);await self.clients.claim()})())});
 self.addEventListener('fetch',e=>{
