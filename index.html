@@ -9,15 +9,15 @@
   <meta name="application-name" content="حساب من" />
   <meta name="apple-mobile-web-app-title" content="حساب من" />
   <title>حساب من</title>
-  <link rel="manifest" href="/manifest.webmanifest?v=11.3.2" />
-  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=11.3.2" />
-  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=11.3.2" />
-  <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png?v=11.3.2" />
-  <link rel="stylesheet" href="/assets/app-v11.3.3.css" />
+  <link rel="manifest" href="/manifest.webmanifest?v=11.3.4" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=11.3.4" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=11.3.4" />
+  <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png?v=11.3.4" />
+  <link rel="stylesheet" href="/assets/app-v11.3.4.css" />
   <script>
 (() => {
   'use strict';
-  const V='v11.3.3';
+  const V='v11.3.4';
   const CFG='pfm-supabase-config';
   const SESSION='pfm-supabase-session-v3';
   const DATA='pfm-v9.0.0';
@@ -26,7 +26,7 @@
 
   const FALLBACK_CFG={
     url:'https://clvwnkpphjrrywdiefoe.supabase.co',
-    anonKey:'sb_publishable_uI-cpF2zCBfiaxakec-WXw_w-zSVJaT'
+    anonKey:'sb_publishable_uI-cpF2zCBfiaxakec-WXw_w-zSvJaT'
   };
   function findLegacyConfig(){
     const direct=read(CFG,null);
@@ -102,7 +102,7 @@
 
   function base(){
     const c=document.createElement('div');c.id='pfmGateCard';
-    c.innerHTML=`<div class="pfmLogo"><img src="/apple-touch-icon.png?v=11.3.2" alt=""></div><h1>حساب من</h1><span class="ver">${V}</span><div class="sub">ورود امن به اطلاعات مالی</div>`;
+    c.innerHTML=`<div class="pfmLogo"><img src="/apple-touch-icon.png?v=11.3.4" alt=""></div><h1>حساب من</h1><span class="ver">${V}</span><div class="sub">ورود امن به اطلاعات مالی</div>`;
     return c;
   }
   function ensureGate(){
@@ -228,7 +228,7 @@
         const body=await r.json().catch(()=>null);if(!r.ok)throw new Error(body?.msg||body?.message||body?.error_description||'تغییر رمز انجام نشد');
         const s=sec(),salt=s.salt||b64u(crypto.getRandomValues(new Uint8Array(16)));setSec({...s,salt,hash:await sha(salt+'|'+p1.value)});
         if(refresh){const old=read(SESSION,{});write(SESSION,{...old,access_token:token,refresh_token:refresh,user:body||old.user,expires_at:Math.floor(Date.now()/1000)+3600})}
-        history.replaceState(null,'',location.pathname+'?app=v11.3.3');
+        history.replaceState(null,'',location.pathname+'?app=v11.3.4');
         msg.style.color='#047857';msg.textContent='رمز با موفقیت تغییر کرد.';setTimeout(()=>unlock(),700);
       }catch(e){msg.style.color='#b91c1c';msg.textContent=e?.message||'تغییر رمز انجام نشد.';btn.disabled=false;btn.textContent='ذخیره رمز جدید'}
     };
@@ -283,7 +283,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
 </script>
-  <script type="module" crossorigin src="/assets/app-v11.3.3.js"></script>
+  <script type="module" crossorigin src="/assets/app-v11.3.4.js"></script>
 </head>
 <body>
   <div id="root"></div>
