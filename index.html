@@ -3,244 +3,184 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#0f172a" />
+  <meta name="theme-color" content="#075354" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="application-name" content="حساب من" />
+  <meta name="apple-mobile-web-app-title" content="حساب من" />
   <title>حساب من</title>
-  <script>(() => {
+  <link rel="manifest" href="/manifest.webmanifest?v=11.3.0" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=11.3.0" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=11.3.0" />
+  <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png?v=11.3.0" />
+  <link rel="stylesheet" href="/assets/app-v11.3.0.css" />
+  <script>
+(() => {
   'use strict';
+  const V='v11.3.0';
+  const CFG='pfm-supabase-config';
+  const SESSION='pfm-supabase-session-v3';
+  const DATA='pfm-v9.0.0';
+  const SEC='pfm-device-security-v11.3';
+  const HIDDEN='pfm-security-hidden-v11.3';
 
-  const VERSION = 'v11.2.0';
-  const APP_KEY = 'pfm-v9.0.0';
-  const SECURITY_KEY = 'pfm-device-security-v11.2';
-  const HIDDEN_AT_KEY = 'pfm-security-hidden-at';
+  const read=(k,f=null)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch{return f}};
+  const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+  const sha=async s=>{
+    const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
+    return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+  };
+  const b64u=b=>{let s='';new Uint8Array(b).forEach(x=>s+=String.fromCharCode(x));return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')};
+  const unb64u=v=>{let b=String(v||'').replace(/-/g,'+').replace(/_/g,'/');b+='='.repeat((4-b.length%4)%4);const s=atob(b);return Uint8Array.from(s,c=>c.charCodeAt(0))};
+  const chall=()=>crypto.getRandomValues(new Uint8Array(32));
+  const webauthn=()=>!!(window.isSecureContext&&window.PublicKeyCredential&&navigator.credentials?.create&&navigator.credentials?.get);
+  const sessionEmail=()=>read(SESSION,{})?.user?.email||'';
+  const localPin=()=>String(read(DATA,{})?.settings?.pin||'').replace(/\D/g,'');
+  const sec=()=>({face:false,cred:'',salt:'',hash:'',...read(SEC,{})});
+  const setSec=v=>write(SEC,v);
 
-  const faToEn = v => String(v ?? '').replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
-
-  function getAppData(){
-    try { return JSON.parse(localStorage.getItem(APP_KEY) || '{}'); }
-    catch { return {}; }
-  }
-  function getPin(){
-    const p = getAppData()?.settings?.pin;
-    return p ? faToEn(p).replace(/\D/g,'') : '';
-  }
-  function getSettings(){
-    try {
-      return {
-        faceIdEnabled:false,
-        credentialId:'',
-        lockTimeout:0,
-        ...JSON.parse(localStorage.getItem(SECURITY_KEY)||'{}')
-      };
-    } catch {
-      return {faceIdEnabled:false,credentialId:'',lockTimeout:0};
-    }
-  }
-  function saveSettings(v){ localStorage.setItem(SECURITY_KEY,JSON.stringify(v)); }
-
-  function b64url(bytes){
-    let s='';
-    new Uint8Array(bytes).forEach(b=>s+=String.fromCharCode(b));
-    return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-  }
-  function fromB64url(v){
-    const b=String(v||'').replace(/-/g,'+').replace(/_/g,'/');
-    const p=b+'='.repeat((4-b.length%4)%4);
-    const s=atob(p);
-    return Uint8Array.from(s,c=>c.charCodeAt(0));
-  }
-  function challenge(){ return crypto.getRandomValues(new Uint8Array(32)); }
-  function supported(){
-    return !!(window.isSecureContext && window.PublicKeyCredential &&
-      navigator.credentials && navigator.credentials.create && navigator.credentials.get);
-  }
-
-  const style=document.createElement('style');
-  style.textContent=`
-    #pfmSecurityOverlay{position:fixed;inset:0;z-index:2147483647;background:linear-gradient(145deg,#eef7f5,#f8fafc);display:flex;align-items:center;justify-content:center;padding:18px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif;direction:rtl}
-    #pfmSecurityOverlay *{box-sizing:border-box}
-    #pfmSecurityCard{width:min(410px,94vw);background:#fff;border:1px solid #dbe5ef;border-radius:24px;padding:24px;box-shadow:0 24px 70px rgba(15,23,42,.15);text-align:center;color:#0f172a}
-    .pfmMark{width:60px;height:60px;margin:0 auto 12px;border-radius:19px;display:grid;place-items:center;background:linear-gradient(145deg,#ccfbf1,#dbeafe);border:1px solid #99f6e4;color:#0f766e;font-size:29px;font-weight:900}
-    #pfmSecurityCard h1{margin:0;font-size:1.45rem} #pfmSecurityCard .sub{margin:6px 0 18px;color:#64748b;font-size:.86rem}
-    .pfmFace,.pfmPrimary,.pfmSecondary{width:100%;min-height:50px;border-radius:15px;font-weight:800;font-size:.95rem;cursor:pointer}
-    .pfmFace{border:1px solid #99f6e4;background:linear-gradient(145deg,#ecfdf5,#f0fdfa);color:#065f46;display:flex;align-items:center;justify-content:center;gap:10px}
-    .pfmPrimary{border:0;background:#0f766e;color:#fff}.pfmSecondary{border:1px solid #cbd5e1;background:#fff;color:#334155}
-    .pfmFace:disabled,.pfmPrimary:disabled{opacity:.6}
-    .pfmDivider{display:flex;align-items:center;gap:10px;margin:15px 0;color:#94a3b8;font-size:.74rem}.pfmDivider:before,.pfmDivider:after{content:"";height:1px;background:#e2e8f0;flex:1}
-    #pfmPin{width:100%;height:50px;border:1px solid #cbd5e1;border-radius:14px;margin-bottom:9px;text-align:center;font-size:1.15rem;letter-spacing:.3em;outline:none}
-    #pfmPin:focus{border-color:#0f766e;box-shadow:0 0 0 3px rgba(15,118,110,.12)}
-    .pfmMsg{min-height:22px;margin:8px 0 0;color:#b91c1c;font-size:.8rem;line-height:1.6}.pfmPrivacy{display:block;margin-top:14px;color:#94a3b8;font-size:.7rem;line-height:1.7}
-    .pfmEnroll{display:grid;gap:10px}.pfmEnroll p{color:#475569;line-height:1.8;font-size:.86rem}
-    #pfmLockNow{position:fixed;left:12px;top:74px;z-index:70;width:39px;height:39px;border-radius:13px;border:1px solid #dbe5ef;background:rgba(255,255,255,.94);box-shadow:0 8px 24px rgba(15,23,42,.10);display:grid;place-items:center;color:#0f766e;font-size:18px;cursor:pointer}
-    @media(max-width:600px){#pfmLockNow{top:72px;left:10px}}
+  // Show a blocker immediately, before React paints.
+  const css=document.createElement('style');
+  css.textContent=`
+  html.pfmLocked body{overflow:hidden!important}
+  #pfmGate{position:fixed;inset:0;z-index:2147483647;background:linear-gradient(160deg,#062e33 0%,#0b5354 55%,#eef7f5 55%,#f8fafc 100%);display:flex;align-items:center;justify-content:center;padding:18px;direction:rtl;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Tahoma,sans-serif}
+  #pfmGate *{box-sizing:border-box}#pfmGateCard{width:min(430px,94vw);background:rgba(255,255,255,.98);border-radius:28px;padding:25px;box-shadow:0 28px 80px rgba(2,32,36,.28);border:1px solid rgba(255,255,255,.8);text-align:center;color:#0f172a}
+  .pfmLogo{width:72px;height:72px;border-radius:22px;margin:0 auto 12px;overflow:hidden;box-shadow:0 10px 30px rgba(15,118,110,.2)}.pfmLogo img{width:100%;height:100%;display:block}
+  #pfmGate h1{margin:0;font-size:1.55rem}#pfmGate .ver{display:inline-block;margin-top:7px;padding:4px 9px;border-radius:999px;background:#e6fffa;color:#0f766e;font-weight:800;font-size:.72rem}
+  #pfmGate .sub{color:#64748b;margin:8px 0 17px;font-size:.86rem}.pfmFace,.pfmPrimary,.pfmSecondary{width:100%;min-height:52px;border-radius:16px;font-weight:850;font-size:.94rem;cursor:pointer}
+  .pfmFace{border:1px solid #99f6e4;background:linear-gradient(145deg,#ecfdf5,#f0fdfa);color:#065f46}.pfmPrimary{border:0;background:#0f766e;color:#fff}.pfmSecondary{border:1px solid #cbd5e1;background:#fff;color:#334155}
+  .pfmFace:disabled,.pfmPrimary:disabled{opacity:.6}.pfmDivider{display:flex;align-items:center;gap:10px;margin:15px 0;color:#94a3b8;font-size:.74rem}.pfmDivider:before,.pfmDivider:after{content:"";height:1px;background:#e2e8f0;flex:1}
+  .pfmInput{width:100%;height:52px;border:1px solid #cbd5e1;border-radius:15px;padding:0 14px;margin-bottom:10px;font-size:1rem;outline:none}.pfmInput:focus{border-color:#0f766e;box-shadow:0 0 0 3px rgba(15,118,110,.12)}
+  .pfmMsg{min-height:22px;margin-top:8px;color:#b91c1c;font-size:.8rem;line-height:1.6}.pfmNote{display:block;margin-top:13px;color:#94a3b8;font-size:.7rem;line-height:1.7}.pfmEnroll{display:grid;gap:10px}.pfmEnroll p{color:#475569;line-height:1.85;font-size:.86rem}
+  #pfmLockNow{position:fixed;left:12px;top:82px;z-index:99999;width:41px;height:41px;border-radius:13px;border:1px solid #dbe5ef;background:#fff;box-shadow:0 8px 24px rgba(15,23,42,.11);font-size:17px;cursor:pointer}
   `;
-  document.head.appendChild(style);
+  document.documentElement.appendChild(css);
 
-  let overlay=null, failures=0, blockedUntil=0, locking=true;
+  let gate=null,fail=0,blocked=0,unlocked=false;
 
-  function updateVersion(){
-    document.querySelectorAll('.version').forEach(el=>{ if(el.textContent!==VERSION) el.textContent=VERSION; });
+  function base(){
+    const c=document.createElement('div');c.id='pfmGateCard';
+    c.innerHTML=`<div class="pfmLogo"><img src="/apple-touch-icon.png?v=11.3.0" alt=""></div><h1>حساب من</h1><span class="ver">${V}</span><div class="sub">ورود امن به اطلاعات مالی</div>`;
+    return c;
   }
-
-  function ensureLockButton(){
-    if(document.getElementById('pfmLockNow')) return;
-    if(!document.body) return;
-    const pin=getPin(), sec=getSettings();
-    if(!pin && !sec.faceIdEnabled) return;
-    const b=document.createElement('button');
-    b.id='pfmLockNow'; b.type='button'; b.title='قفل کردن الآن'; b.textContent='🔒';
-    b.addEventListener('click',()=>showLock());
+  function ensureGate(){
+    document.documentElement.classList.add('pfmLocked');
+    if(!gate){gate=document.createElement('div');gate.id='pfmGate';document.documentElement.appendChild(gate)}
+    return gate;
+  }
+  function unlock(){
+    unlocked=true;
+    document.documentElement.classList.remove('pfmLocked');
+    gate?.remove();gate=null;
+    addLockButton();
+    document.querySelectorAll('.version').forEach(x=>x.textContent=V);
+  }
+  function addLockButton(){
+    if(document.getElementById('pfmLockNow')||!document.body)return;
+    const b=document.createElement('button');b.id='pfmLockNow';b.type='button';b.title='قفل کردن الآن';b.textContent='🔒';
+    b.onclick=()=>{unlocked=false;showGate()};
     document.body.appendChild(b);
   }
-
-  function removeOverlay(){
-    if(overlay){ overlay.remove(); overlay=null; }
-    document.documentElement.classList.remove('pfm-security-locked');
-    locking=false;
-    ensureLockButton();
-    updateVersion();
-  }
-
-  function cardBase(){
-    const card=document.createElement('div');
-    card.id='pfmSecurityCard';
-    card.innerHTML=`<div class="pfmMark">◉</div><h1>حساب من</h1><div class="sub">ورود امن به اطلاعات مالی</div>`;
-    return card;
-  }
-
-  function showEnroll(){
-    if(!overlay) return;
-    const card=cardBase();
-    const box=document.createElement('div'); box.className='pfmEnroll';
-    box.innerHTML=`<p>رمز درست بود. اگر بخواهی، از این به بعد می‌توانی روی همین iPhone با <b>Face ID / Passkey</b> وارد شوی. رمز فعلی همیشه روش جایگزین باقی می‌ماند.</p>`;
-    const yes=document.createElement('button'); yes.className='pfmFace'; yes.textContent='فعال‌سازی Face ID';
-    const no=document.createElement('button'); no.className='pfmSecondary'; no.textContent='فعلاً با رمز ادامه بده';
-    yes.onclick=async()=>{
-      yes.disabled=true; yes.textContent='در حال فعال‌سازی…';
+  async function verifyPassword(password){
+    const cfg=read(CFG,{}), email=sessionEmail(), s=sec();
+    // First prefer online Supabase verification with the same old account password.
+    if(cfg?.url&&cfg?.anonKey&&email&&navigator.onLine){
       try{
-        if(!supported()) throw new Error('unsupported');
-        const userText=(getAppData()?.settings?.ownerName || 'hesab-man-user').slice(0,64);
-        const userId=new TextEncoder().encode(userText || 'hesab-man-user').slice(0,64);
-        const cred=await navigator.credentials.create({publicKey:{
-          challenge:challenge(),rp:{name:'حساب من'},
-          user:{id:userId,name:'hesab-man-user',displayName:'حساب من'},
-          pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
-          authenticatorSelection:{authenticatorAttachment:'platform',residentKey:'preferred',requireResidentKey:false,userVerification:'required'},
-          timeout:60000,attestation:'none'
-        }});
-        if(!cred?.rawId) throw new Error('not-created');
-        const sec=getSettings(); saveSettings({...sec,faceIdEnabled:true,credentialId:b64url(cred.rawId)});
-        removeOverlay();
-      }catch(e){
-        console.error(e);
-        yes.disabled=false; yes.textContent='فعال‌سازی Face ID';
-        const msg=card.querySelector('.pfmMsg') || document.createElement('div');
-        msg.className='pfmMsg'; msg.textContent=e?.name==='NotAllowedError'?'فعال‌سازی لغو شد. می‌توانی با رمز وارد شوی.':'Face ID / Passkey روی این حالت مرورگر در دسترس نیست. ورود با رمز فعال است.';
-        box.appendChild(msg);
-      }
-    };
-    no.onclick=removeOverlay;
-    box.append(yes,no);
-    card.appendChild(box);
-    overlay.replaceChildren(card);
-  }
-
-  async function faceUnlock(faceBtn,msg){
-    const sec=getSettings();
-    if(!sec.faceIdEnabled||!sec.credentialId||!supported()){
-      msg.textContent='Face ID / Passkey در دسترس نیست؛ با رمز وارد شو.';
-      return;
+        const r=await fetch(cfg.url.replace(/\/+$/,'')+'/auth/v1/token?grant_type=password',{
+          method:'POST',headers:{apikey:cfg.anonKey,'Content-Type':'application/json'},
+          body:JSON.stringify({email,password})
+        });
+        const body=await r.json().catch(()=>null);
+        if(r.ok&&body?.access_token){
+          body.expires_at=Math.floor(Date.now()/1000)+Number(body.expires_in||3600);
+          write(SESSION,body);
+          const salt=s.salt||b64u(crypto.getRandomValues(new Uint8Array(16)));
+          setSec({...s,salt,hash:await sha(salt+'|'+password)});
+          return true;
+        }
+        return false;
+      }catch{}
     }
-    faceBtn.disabled=true; faceBtn.textContent='در حال بررسی…'; msg.textContent='';
+    // Offline fallback: same password, hashed locally after one successful online login.
+    if(s.salt&&s.hash) return (await sha(s.salt+'|'+password))===s.hash;
+    // Legacy local PIN fallback if one exists.
+    const pin=localPin();
+    if(pin&&password===pin)return true;
+    return false;
+  }
+  async function enrollFace(){
+    if(!webauthn())throw new Error('unsupported');
+    const email=sessionEmail()||'hesab-man-user';
+    let uid=new TextEncoder().encode(email);if(uid.length>64)uid=uid.slice(0,64);
+    const cred=await navigator.credentials.create({publicKey:{
+      challenge:chall(),rp:{name:'حساب من'},user:{id:uid,name:email,displayName:'حساب من'},
+      pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+      authenticatorSelection:{authenticatorAttachment:'platform',residentKey:'preferred',requireResidentKey:false,userVerification:'required'},
+      timeout:60000,attestation:'none'
+    }});
+    if(!cred?.rawId)throw new Error('failed');
+    const s=sec();setSec({...s,face:true,cred:b64u(cred.rawId)});
+  }
+  async function faceLogin(btn,msg){
+    const s=sec();
+    if(!s.face||!s.cred||!webauthn()){msg.textContent='Face ID / Passkey روی این دستگاه فعال نیست.';return}
+    btn.disabled=true;btn.textContent='در حال بررسی…';msg.textContent='';
     try{
-      const cred=await navigator.credentials.get({publicKey:{
-        challenge:challenge(),
-        allowCredentials:[{id:fromB64url(sec.credentialId),type:'public-key',transports:['internal']}],
-        userVerification:'required',timeout:60000
-      }});
-      if(cred) removeOverlay();
-    }catch(e){
-      console.error(e);
-      msg.textContent=e?.name==='NotAllowedError'?'Face ID لغو شد؛ می‌توانی دوباره امتحان کنی یا با رمز وارد شوی.':'Face ID انجام نشد؛ با رمز وارد شو.';
-    }finally{
-      if(document.body.contains(faceBtn)){faceBtn.disabled=false;faceBtn.textContent='ورود با Face ID';}
+      const c=await navigator.credentials.get({publicKey:{challenge:chall(),allowCredentials:[{id:unb64u(s.cred),type:'public-key',transports:['internal']}],userVerification:'required',timeout:60000}});
+      if(c)unlock();
+    }catch(e){msg.textContent=e?.name==='NotAllowedError'?'Face ID لغو شد؛ با رمز وارد شو.':'Face ID انجام نشد؛ با رمز وارد شو.'}
+    finally{if(btn.isConnected){btn.disabled=false;btn.textContent='ورود با Face ID'}}
+  }
+  function showEnroll(){
+    const g=ensureGate(),c=base(),box=document.createElement('div');box.className='pfmEnroll';
+    box.innerHTML='<p>رمز حساب تأیید شد. می‌خواهی از این به بعد روی همین iPhone با <b>Face ID</b> وارد شوی؟ رمز قبلی همیشه روش جایگزین باقی می‌ماند.</p>';
+    const y=document.createElement('button');y.className='pfmFace';y.textContent='فعال‌سازی Face ID';
+    const n=document.createElement('button');n.className='pfmSecondary';n.textContent='فعلاً با رمز ادامه بده';
+    const m=document.createElement('div');m.className='pfmMsg';
+    y.onclick=async()=>{y.disabled=true;y.textContent='در حال فعال‌سازی…';try{await enrollFace();unlock()}catch(e){m.textContent=e?.name==='NotAllowedError'?'فعال‌سازی لغو شد؛ می‌توانی با رمز ادامه بدهی.':'Face ID / Passkey در این حالت مرورگر در دسترس نیست.';y.disabled=false;y.textContent='فعال‌سازی Face ID'}};
+    n.onclick=unlock;box.append(y,n,m);c.appendChild(box);g.replaceChildren(c);
+  }
+  function showGate(){
+    if(unlocked)return;
+    const g=ensureGate(),c=base(),s=sec(),msg=document.createElement('div');msg.className='pfmMsg';
+    if(s.face&&s.cred){
+      const face=document.createElement('button');face.className='pfmFace';face.textContent='ورود با Face ID';face.onclick=()=>faceLogin(face,msg);c.appendChild(face);
+      const div=document.createElement('div');div.className='pfmDivider';div.innerHTML='<span>یا با رمز حساب</span>';c.appendChild(div);
     }
+    const email=sessionEmail();
+    if(email){const em=document.createElement('div');em.style.cssText='font-size:.76rem;color:#64748b;margin-bottom:8px;direction:ltr';em.textContent=email;c.appendChild(em)}
+    const inp=document.createElement('input');inp.className='pfmInput';inp.type='password';inp.placeholder='رمز قبلی حساب';inp.autocomplete='current-password';
+    const btn=document.createElement('button');btn.className='pfmPrimary';btn.textContent='ورود با رمز';
+    const go=async()=>{
+      if(Date.now()<blocked){msg.textContent=`${Math.ceil((blocked-Date.now())/1000)} ثانیه دیگر امتحان کن.`;return}
+      if(!inp.value){msg.textContent='رمز را وارد کن.';return}
+      btn.disabled=true;btn.textContent='در حال بررسی…';msg.textContent='';
+      const ok=await verifyPassword(inp.value);
+      btn.disabled=false;btn.textContent='ورود با رمز';
+      if(ok){fail=0;blocked=0;if(!s.face&&webauthn())showEnroll();else unlock()}
+      else{fail++;if(fail>=5){fail=0;blocked=Date.now()+30000;msg.textContent='۵ تلاش ناموفق؛ ورود ۳۰ ثانیه موقتاً قفل شد.'}else msg.textContent=`رمز صحیح نیست؛ ${5-fail} تلاش دیگر باقی مانده.`}
+    };
+    btn.onclick=go;inp.onkeydown=e=>{if(e.key==='Enter')go()};
+    c.append(inp,btn,msg);
+    const note=document.createElement('small');note.className='pfmNote';note.textContent='این همان رمز قبلی حساب ابری است. بعد از یک ورود موفق، در حالت آفلاین هم قابل بررسی خواهد بود.';c.appendChild(note);
+    g.replaceChildren(c);setTimeout(()=>{if(!s.face)inp.focus()},120);
   }
 
-  function showLock(){
-    const pin=getPin(), sec=getSettings();
-    if(!pin && !sec.faceIdEnabled){ locking=false; updateVersion(); return; }
-    locking=true;
-    if(!overlay){
-      overlay=document.createElement('div'); overlay.id='pfmSecurityOverlay'; document.body.appendChild(overlay);
-    }
-    const card=cardBase();
-    const msg=document.createElement('div'); msg.className='pfmMsg';
-
-    if(sec.faceIdEnabled){
-      const face=document.createElement('button'); face.className='pfmFace'; face.innerHTML='<span>⌁</span><span>ورود با Face ID</span>';
-      face.onclick=()=>faceUnlock(face,msg);
-      card.appendChild(face);
-      const div=document.createElement('div'); div.className='pfmDivider'; div.innerHTML='<span>یا با رمز</span>'; card.appendChild(div);
-    }
-
-    if(pin){
-      const input=document.createElement('input'); input.id='pfmPin'; input.type='password'; input.inputMode='numeric'; input.maxLength=8; input.placeholder='رمز ۴ تا ۸ رقمی';
-      input.oninput=()=>{input.value=faToEn(input.value).replace(/\D/g,'').slice(0,8)};
-      const enter=document.createElement('button'); enter.className='pfmPrimary'; enter.textContent='ورود با رمز';
-      const attempt=()=>{
-        if(Date.now()<blockedUntil){
-          msg.textContent=`به دلیل چند تلاش ناموفق، ${Math.ceil((blockedUntil-Date.now())/1000)} ثانیه دیگر امتحان کن.`;
-          return;
-        }
-        if(input.value===pin){
-          failures=0; blockedUntil=0;
-          if(!sec.faceIdEnabled && supported()) showEnroll(); else removeOverlay();
-        }else{
-          failures++;
-          if(failures>=5){ failures=0;blockedUntil=Date.now()+30000;msg.textContent='۵ تلاش ناموفق؛ ورود با رمز ۳۰ ثانیه موقتاً قفل شد.'; }
-          else msg.textContent=`رمز اشتباه است؛ ${5-failures} تلاش دیگر باقی مانده.`;
-        }
-      };
-      enter.onclick=attempt; input.onkeydown=e=>{if(e.key==='Enter')attempt()};
-      card.append(input,enter);
-      setTimeout(()=>{if(!sec.faceIdEnabled) input.focus()},100);
-    }
-
-    card.appendChild(msg);
-    const privacy=document.createElement('small');privacy.className='pfmPrivacy';privacy.textContent='اطلاعات Face ID داخل برنامه یا فضای ابری ذخیره نمی‌شود؛ احراز هویت توسط خود iPhone انجام می‌شود.';
-    card.appendChild(privacy);
-    overlay.replaceChildren(card);
-  }
-
-  function shouldLockAfterReturn(){
-    const pin=getPin(), sec=getSettings();
-    if(!pin && !sec.faceIdEnabled) return false;
-    const hiddenAt=Number(sessionStorage.getItem(HIDDEN_AT_KEY)||0);
-    const mins=Number(sec.lockTimeout||0);
-    if(mins===0) return true;
-    return !hiddenAt || (Date.now()-hiddenAt)>=mins*60000;
-  }
+  // Update old visible version labels if React renders them.
+  new MutationObserver(()=>{document.querySelectorAll('.version').forEach(x=>x.textContent=V);if(unlocked)addLockButton()})
+    .observe(document.documentElement,{subtree:true,childList:true,characterData:true});
 
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='hidden') sessionStorage.setItem(HIDDEN_AT_KEY,String(Date.now()));
-    if(document.visibilityState==='visible' && shouldLockAfterReturn()) showLock();
+    if(document.visibilityState==='hidden')sessionStorage.setItem(HIDDEN,String(Date.now()));
+    if(document.visibilityState==='visible'){unlocked=false;showGate()}
   });
 
-  const observer=new MutationObserver(()=>{ updateVersion(); if(!locking) ensureLockButton(); });
-  observer.observe(document.documentElement,{subtree:true,childList:true,characterData:true});
-
-  window.addEventListener('DOMContentLoaded',()=>{
-    updateVersion();
-    setTimeout(()=>{ showLock(); },60);
-  });
-})();</script>
-  <script type="module" crossorigin src="/assets/index-BAPCgEmd.js?v=11.2.1"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-DZRzqmVN.css?v=11.2.1">
-<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/apple-touch-icon.png?v=11.2.1">
-<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=11.2.1">
-<link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png?v=11.2.1">
+  // Execute whether script loaded before or after DOMContentLoaded.
+  const start=()=>{unlocked=false;showGate()};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+})();
+</script>
+  <script type="module" crossorigin src="/assets/app-v11.3.0.js"></script>
 </head>
 <body>
   <div id="root"></div>
