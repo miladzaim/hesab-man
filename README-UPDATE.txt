@@ -1,10 +1,3 @@
-حساب من v11.4.1 — اتصال مستقیم ابری
-
-تغییرات:
-- خطای HTTP 521 ناشی از Cloud Proxy دور زده شد.
-- اتصال همگام‌سازی دوباره مستقیماً به پروژه فعال Supabase انجام می‌شود.
-- حذف رمز / Face ID نسخه v11.4.0 حفظ شده است.
-- اطلاعات محلی و نشست ابری حذف یا Reset نمی‌شوند.
-- Service Worker recovery بدون fetch handler حفظ شده تا Safari دوباره درگیر redirect/cache خراب نشود.
-
-برای استقرار: همه فایل‌های این پوشه را در ریشه repo جایگزین و روی main commit کنید.
+Hesab Man v11.4.2
+Fix: corrected malformed Supabase URL in v11.4.1.
+Password/Face ID gate remains removed.
