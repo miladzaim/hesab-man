@@ -1,9 +1,10 @@
-حساب من v11.3.6 - Offline Reliability Fix
+حساب من v11.3.7 - iOS Safari Service Worker Hotfix
 
-تغییرات:
-- باز شدن سریع‌تر PWA از کش محلی در صورت اختلال pages.dev
-- عدم معطل شدن صفحه روی درخواست شبکه هنگام قطع/فیلتر بودن میزبان
-- پیام همگام‌سازی واضح‌تر؛ ذخیره محلی اطلاعات حفظ می‌شود
-- نسخه 11.3.6 و cache جدید
+اصلاح اصلی:
+- رفع خطای Safari: Response served by service worker has redirections
+- بازسازی پاسخ‌های cache برای حذف redirect history
+- cache مستقل نسخه 11.3.7
+- حفظ اطلاعات Local Storage / IndexedDB؛ هیچ Reset یا حذف داده انجام نمی‌شود
 
-نکته: مشکل دسترسی مستقیم به pages.dev از سمت شبکه/اپراتور است و با فایل برنامه به‌تنهایی حذف نمی‌شود. برای دسترسی آنلاین بدون VPN، دامنه اختصاصی لازم است.
+روش انتشار:
+فایل‌های داخل این پوشه را روی branch اصلی مخزن GitHub جایگزین کنید تا Cloudflare Pages خودکار Deploy شود.
