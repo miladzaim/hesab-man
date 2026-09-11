@@ -13,14 +13,14 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=11.4.0" />
   <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png?v=11.4.0" />
   <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png?v=11.4.0" />
-  <link rel="stylesheet" href="/assets/app-v11.4.0.css" />
+  <link rel="stylesheet" href="/assets/app-v11.4.1.css" />
   <script>
 (() => {
   'use strict';
-  const V='v11.4.0';
+  const V='v11.4.1';
   const CFG='pfm-supabase-config';
   const FALLBACK_CFG={
-    url:location.origin+'/api',
+    url:'https://clvwnkpphjrrywdiefoe.supabase.co',
     anonKey:'sb_publishable_uI-cpF2zCBfiaxakec-WXw_w-zSvJaT'
   };
   const read=(k,f=null)=>{try{return JSON.parse(localStorage.getItem(k)||'null')??f}catch{return f}};
@@ -47,7 +47,7 @@
     return null;
   }
   const existing=findLegacyConfig();
-  write(CFG,{url:location.origin+'/api',anonKey:String(existing?.anonKey||FALLBACK_CFG.anonKey)});
+  write(CFG,{url:'https://clvwnkpphjrrywdiefoe.supabase.co',anonKey:String(existing?.anonKey||FALLBACK_CFG.anonKey)});
 
   // Password/PIN/Face-ID gate intentionally removed by user request.
   // Existing cloud session remains untouched so sync can keep working.
@@ -65,7 +65,7 @@
   else setTimeout(applyVersion,0);
 })();
 </script>
-  <script type="module" crossorigin src="/assets/app-v11.4.0.js"></script>
+  <script type="module" crossorigin src="/assets/app-v11.4.1.js"></script>
 </head>
 <body>
   <div id="root"></div>
