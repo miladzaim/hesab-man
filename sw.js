@@ -1,4 +1,4 @@
-// Hesab Man v11.3.8 Safari recovery service worker.
+// Hesab Man v11.4.0 Safari recovery service worker.
 // Intentionally has NO fetch handler. It replaces older broken workers,
 // clears their caches, then unregisters itself so Safari uses the network
 // normally on subsequent navigations.
@@ -17,7 +17,7 @@ self.addEventListener('activate', event => {
     try {
       const clients = await self.clients.matchAll({type:'window', includeUncontrolled:true});
       for (const client of clients) {
-        try { client.postMessage({type:'HM_SW_RECOVERY_138'}); } catch (_) {}
+        try { client.postMessage({type:'HM_SW_RECOVERY_140'}); } catch (_) {}
       }
     } catch (_) {}
   })());

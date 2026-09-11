@@ -1,1 +1,10 @@
-Hesab Man v11.3.8 - iOS Safari service-worker recovery. Deploy all files to root. This version disables/unregisters the old service worker and clears only Cache Storage. It does NOT delete LocalStorage or IndexedDB financial data.
+حساب من v11.4.0 — بدون رمز ورود
+
+تغییرات:
+- صفحه رمز / Face ID هنگام ورود کاملاً حذف شد.
+- قفل PIN و Auto Lock داخل تنظیمات حذف شد.
+- PIN قدیمی در داده محلی در اولین اجرا خالی و Auto Lock خاموش می‌شود.
+- نشست ابری موجود حذف نمی‌شود تا همگام‌سازی حفظ شود.
+- Cloud proxy نسخه v11.3.9 حفظ شده و فقط نسخه‌گذاری به v11.4.0 بروزرسانی شده است.
+
+برای استقرار: همه فایل‌های این پوشه را در ریشه repo جایگزین و روی main commit کنید.
