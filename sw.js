@@ -1,1 +1,47 @@
-if(!self.define){let e,s={};const i=(i,n)=>(i=new URL(i+".js",n).href,s[i]||new Promise(s=>{if("document"in self){const e=document.createElement("script");e.src=i,e.onload=s,document.head.appendChild(e)}else e=i,importScripts(i),s()}).then(()=>{let e=s[i];if(!e)throw new Error(`Module ${i} didn’t register its module`);return e}));self.define=(n,r)=>{const o=e||("document"in self?document.currentScript.src:"")||location.href;if(s[o])return;let t={};const l=e=>i(e,o),f={module:{uri:o},exports:t,require:l};s[o]=Promise.all(n.map(e=>f[e]||l(e))).then(e=>(r(...e),t))}}define(["./workbox-9c191d2f"],function(e){"use strict";self.skipWaiting(),e.clientsClaim(),e.precacheAndRoute([{url:"security-v11.2.js",revision:"d3fe4d1bea087e574bcc839a777f223f"},{url:"index.html",revision:"56b9747020aad0d8c25938bef97edee1"},{url:"assets/workbox-window.prod.es5-BBnX5xw4.js",revision:null},{url:"assets/index-DZRzqmVN.css",revision:null},{url:"assets/index-BAPCgEmd.js",revision:null},{url:"icon.svg",revision:"542cc3a882a35efd9a5392dfe9e7991e"},{url:"manifest.webmanifest",revision:"21bb7233efa9991dd77f8f6c5b75f614"}],{}),e.cleanupOutdatedCaches(),e.registerRoute(new e.NavigationRoute(e.createHandlerBoundToURL("index.html")))});
+const CACHE='hesab-man-v11.3.6';
+const CORE=[
+  '/', '/index.html', '/assets/app-v11.3.6.js', '/assets/app-v11.3.6.css',
+  '/assets/workbox-window.prod.es5-BBnX5xw4.js', '/manifest.webmanifest',
+  '/icon-192.png','/icon-512.png','/icon-1024.png','/apple-touch-icon.png','/icon.svg'
+];
+self.addEventListener('install',event=>{
+  self.skipWaiting();
+  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).catch(()=>{}));
+});
+self.addEventListener('activate',event=>{
+  event.waitUntil((async()=>{
+    for(const key of await caches.keys()) if(key!==CACHE) await caches.delete(key);
+    await self.clients.claim();
+  })());
+});
+async function cacheFirst(request,fallback){
+  const cache=await caches.open(CACHE);
+  const cached=await cache.match(request) || (fallback ? await cache.match(fallback) : null);
+  if(cached){
+    // Refresh in background, but never delay the UI when the host is filtered/unreachable.
+    fetch(request,{cache:'no-store'}).then(resp=>{if(resp&&resp.ok)cache.put(request,resp.clone())}).catch(()=>{});
+    return cached;
+  }
+  try{
+    const resp=await fetch(request,{cache:'no-store'});
+    if(resp&&resp.ok) cache.put(request,resp.clone());
+    return resp;
+  }catch(err){
+    if(fallback){const fb=await cache.match(fallback);if(fb)return fb;}
+    throw err;
+  }
+}
+self.addEventListener('fetch',event=>{
+  if(event.request.method!=='GET') return;
+  const url=new URL(event.request.url);
+  if(url.origin!==self.location.origin) return;
+  if(event.request.mode==='navigate'){
+    event.respondWith(cacheFirst('/index.html','/index.html'));
+    return;
+  }
+  if(CORE.includes(url.pathname) || url.pathname.startsWith('/assets/')){
+    event.respondWith(cacheFirst(event.request));
+    return;
+  }
+  event.respondWith(fetch(event.request).catch(()=>caches.match(event.request)));
+});
